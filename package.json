@@ -1,0 +1,18 @@
+{
+  "name": "rashisvara",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Free, private Vedic astrology web app. Runs entirely in the browser; host it on GitHub Pages.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node tests/run.js",
+    "serve": "node tests/serve.js",
+    "e2e": "node tests/e2e.js"
+  },
+  "dependencies": {
+    "astronomy-engine": "2.1.19"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Privacy, terms and licences · Rashisvara</title>
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<main class="app legal">
+  <p><a href="./">&larr; Back to the app</a></p>
+  <h1>Privacy, terms and licences</h1>
+  <p class="hint">These notes are written in plain English for the people who use this app. They are not legal advice, and the owner of this copy of the app is responsible for checking the rules that apply where they live.</p>
+
+  <section class="card">
+    <h2>Privacy</h2>
+    <ul>
+      <li><strong>Where your data lives.</strong> Birth details, notes, chats, lessons and settings are saved only in your own browser (local storage). This app has no accounts, no database and no server of its own. You can export or delete everything under Settings.</li>
+      <li><strong>The web host.</strong> The pages are served by GitHub Pages. Like any web host, GitHub can see that your device asked for the page (for example your IP address). The app owner does not receive or control that information. See GitHub's own privacy statement.</li>
+      <li><strong>Place search.</strong> If you press Search, the place name you typed is sent to Open-Meteo's geocoding service to find coordinates. Nothing else is sent. You can skip this by typing latitude, longitude and time zone yourself.</li>
+      <li><strong>AI chat (optional).</strong> If you add your own key and ask a question, this app sends your question, your notes, your lessons, your birth year and the computed chart facts (including dasha dates, from which a birth date can be worked out) to the AI company you chose: Google, Groq or OpenRouter. Your name and birth place are never sent. The box "Facts sent to the AI" shows exactly what goes out. That company's own terms and privacy policy apply to what it receives.</li>
+      <li><strong>Your AI key.</strong> It goes only from your browser to the company you chose. If you choose to save it, it is encrypted with your passphrase (PBKDF2-SHA256 and AES-256-GCM). If you forget the passphrase the key cannot be recovered; just add it again.</li>
+      <li><strong>No tracking.</strong> No cookies, no analytics, no advertising, no fingerprinting.</li>
+      <li><strong>Other people's details.</strong> Only enter birth details of another person if you have their permission, or if you are a parent or carer acting for them.</li>
+      <li><strong>Age.</strong> This app is for adults (18 and over).</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>Terms of use</h2>
+    <ul>
+      <li><strong>Purpose.</strong> For learning and self-reflection. The calculations are astronomical facts. The readings are traditional interpretations. They are not predictions that can be proven, and nobody can promise exact outcomes from a chart.</li>
+      <li><strong>Not advice.</strong> Nothing here is medical, legal, financial, investment or psychological advice. Do not make health, money, legal, marriage or safety decisions because of this app. If you are in distress, please contact a trusted person, local emergency services or a helpline.</li>
+      <li><strong>AI can be wrong.</strong> The AI explains the computed facts and may still make mistakes. Check what it says against the Chart, Dasha and Reading tabs.</li>
+      <li><strong>No remedies for sale.</strong> The app does not sell or recommend gemstones, rituals or amulets and does not use fear to push any action.</li>
+      <li><strong>Your own use.</strong> You are responsible for your AI key and for following the terms of the AI provider and the place-search service. Open-Meteo's free service is for non-commercial use, so do not add advertising or charge for this app while it uses that service.</li>
+      <li><strong>No warranty.</strong> The app is provided "as is", without any promise that it is accurate, available or fit for a purpose. To the extent the law allows, the owner and contributors are not liable for loss arising from its use.</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>Credits and licences</h2>
+    <ul>
+      <li><strong>This app's own code:</strong> MIT Licence (see the LICENSE file).</li>
+      <li><strong>astronomy-engine</strong> by Don Cross, MIT Licence. Used for planet and Moon positions. Licence text below.</li>
+      <li><strong>Fonts:</strong> Cinzel (The Cinzel Project Authors) and Noto Sans, Noto Sans Devanagari and Noto Sans Bengali (The Noto Project Authors), all under the SIL Open Font Licence 1.1. Licence files are in the <code>legal</code> folder of the source.</li>
+      <li><strong>Place data:</strong> Open-Meteo geocoding, licensed CC BY 4.0 (open-meteo.com).</li>
+      <li><strong>Images, animation and sound:</strong> the mandala, star field, chart pictures and every sound are drawn or synthesised by this app's own code. No image, audio or animation files were downloaded or copied.</li>
+      <li><strong>Accuracy checking:</strong> positions were compared offline with the Swiss Ephemeris. No Swiss Ephemeris code or data is included in this app.</li>
+    </ul>
+    <h3>astronomy-engine licence</h3>
+    <pre class="facts">MIT License
+
+Copyright (c) 2019-2023 Don Cross &lt;cosinekitty@gmail.com&gt;
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.</pre>
+  </section>
+  <p class="small"><a href="./">&larr; Back to the app</a></p>
+</main>
+</body>
+</html>
