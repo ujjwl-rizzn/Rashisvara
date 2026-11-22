@@ -5,6 +5,8 @@ the day, week, month and year across nine areas of life. It is a static site wit
 
 Languages: English, Hindi, Bengali and Hinglish.
 
+**Live app:** https://ujjwl-rizzn.github.io/Rashisvara/
+
 ## Features
 
 - **Home:** predictions for today, the next 7 days, the next 30 days and the next 12 months for career, money, love, marriage, family,
