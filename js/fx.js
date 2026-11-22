@@ -2,7 +2,7 @@
     No images are used, so there is nothing to license. Motion stops when the
     person has asked their device for reduced motion, and when the tab is hidden. */
 (function (root, factory) {
-  root.JyotishFx = factory(root.JyotishDom);
+  root.RsvFx = factory(root.RsvDom);
 })(typeof self !== 'undefined' ? self : this, function (D) {
   'use strict';
 

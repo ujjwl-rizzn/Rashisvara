@@ -1,7 +1,7 @@
 /*  Chart drawing: North Indian (diamond) and South Indian (grid), as plain SVG.
     The pictures are drawn by this code, so there are no image files and no copyright questions. */
 (function (root, factory) {
-  root.JyotishChart = factory(root.Jyotish, root.JyotishI18n, root.JyotishDom);
+  root.RsvChart = factory(root.RsvEngine, root.RsvI18n, root.RsvDom);
 })(typeof self !== 'undefined' ? self : this, function (E, I, D) {
   'use strict';
 

@@ -1,6 +1,6 @@
 # Security notes
 
-No website is "hackproof". This file explains what this app does to be hard to attack, what it cannot do, and what you should do as the owner.
+No website can be made completely secure. This file describes the measures this app uses, its known limitations, and what the owner should do.
 
 ## Design
 
@@ -21,7 +21,7 @@ No website is "hackproof". This file explains what this app does to be hard to a
 * **Supply chain.** One vendored dependency (`astronomy-engine`, copied into `assets/vendor/`). No CDN, no analytics, no remote fonts. A secret-scan test fails if a key-like string is committed. `.github/dependabot.yml` watches `package.json` and the CI actions for updates (the vendored browser copy is updated by hand, see the checklist).
 * **Privacy by design.** The AI receives computed facts, not your name or birth place. The "Facts sent to the AI" box shows the exact text.
 
-## What this cannot do (the honest gaps)
+## Known limitations
 
 * **GitHub Pages cannot set custom HTTP headers.** A `<meta>` CSP cannot express `frame-ancestors`, so framing protection relies on the JavaScript guard above, and headers such as `X-Frame-Options`, `Permissions-Policy` and HSTS preload are not under your control. If you later put the site behind Cloudflare or another host that allows headers, add them.
 * **Your device is part of the system.** Anyone who can use your browser profile can read local storage (your people, chats, notes). A malicious browser extension can read a key that is unlocked in memory. Use a device and browser profile you trust, and lock or forget the key when you are done.

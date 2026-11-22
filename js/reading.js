@@ -3,7 +3,7 @@
     Nothing here guesses. Every sentence comes from a rule result. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory(require('./engine.js'), require('./rules.js'), require('./i18n.js'));
-  else root.JyotishReading = factory(root.Jyotish, root.JyotishRules, root.JyotishI18n);
+  else root.RsvReading = factory(root.RsvEngine, root.RsvRules, root.RsvI18n);
 })(typeof self !== 'undefined' ? self : this, function (E, R, I) {
   'use strict';
 

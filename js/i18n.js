@@ -4,7 +4,7 @@
     Hindi and Bengali text once and fix anything that sounds odd: it is plain text below. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.JyotishI18n = factory();
+  else root.RsvI18n = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
@@ -47,6 +47,7 @@
       children: ['Children', 'Children and creativity'], health: ['Wellbeing habits', 'General vitality. Not medical advice.'],
       marriage: ['Marriage and partnership', 'Spouse, partners, relationships'], career: ['Career and work', 'Profession, status, service'],
       foreign: ['Foreign lands and travel', 'Living or working far from home'], spirituality: ['Dharma and spirituality', 'Faith, teachers, inner growth'],
+      love: ['Love and romance', 'Romance, attraction, dating, closeness'], family: ['Family and relatives', 'Family bonds, parents, home life'],
     },
     label: { strong: 'Strong', good: 'Good', mixed: 'Mixed', challenging: 'Needs care' },
     levels: { maha: 'main period', antar: 'sub-period', pratyantar: 'sub-sub-period' },
@@ -193,6 +194,7 @@
       children: ['संतान', 'संतान और रचनात्मकता'], health: ['सेहत की आदतें', 'सामान्य ऊर्जा। यह चिकित्सा सलाह नहीं है।'],
       marriage: ['विवाह और साझेदारी', 'जीवनसाथी, साझेदार, रिश्ते'], career: ['करियर और काम', 'पेशा, पद, सेवा'],
       foreign: ['विदेश और यात्रा', 'घर से दूर रहना या काम करना'], spirituality: ['धर्म और अध्यात्म', 'आस्था, गुरु, भीतरी विकास'],
+      love: ['प्रेम और रोमांस', 'प्रेम, आकर्षण, मेल-जोल, नज़दीकी'], family: ['परिवार और रिश्तेदार', 'पारिवारिक रिश्ते, माता-पिता, घर का माहौल'],
     },
     label: { strong: 'मज़बूत', good: 'अच्छा', mixed: 'मिला-जुला', challenging: 'सावधानी चाहिए' },
     levels: { maha: 'महादशा', antar: 'अंतर्दशा', pratyantar: 'प्रत्यंतर दशा' },
@@ -327,6 +329,7 @@
       children: ['সন্তান', 'সন্তান ও সৃজনশীলতা'], health: ['সুস্থতার অভ্যাস', 'সাধারণ প্রাণশক্তি। এটি চিকিৎসা পরামর্শ নয়।'],
       marriage: ['বিবাহ ও অংশীদারি', 'জীবনসঙ্গী, অংশীদার, সম্পর্ক'], career: ['কর্মজীবন', 'পেশা, পদমর্যাদা, সেবা'],
       foreign: ['বিদেশ ও ভ্রমণ', 'বাড়ি থেকে দূরে থাকা বা কাজ করা'], spirituality: ['ধর্ম ও আধ্যাত্মিকতা', 'বিশ্বাস, গুরু, অন্তরের বিকাশ'],
+      love: ['প্রেম ও রোমান্স', 'প্রেম, আকর্ষণ, মেলামেশা, ঘনিষ্ঠতা'], family: ['পরিবার ও আত্মীয়', 'পারিবারিক বন্ধন, বাবা-মা, ঘরের পরিবেশ'],
     },
     label: { strong: 'শক্তিশালী', good: 'ভালো', mixed: 'মিশ্র', challenging: 'সাবধানতা দরকার' },
     levels: { maha: 'মহাদশা', antar: 'অন্তর্দশা', pratyantar: 'প্রত্যন্তর দশা' },
@@ -456,6 +459,7 @@
       children: ['Santan', 'Santan aur creativity'], health: ['Sehat ki aadatein', 'Samanya urja. Yeh medical salah nahi hai.'],
       marriage: ['Vivah aur partnership', 'Jeevansathi, partner, rishte'], career: ['Career aur kaam', 'Pesha, pad, seva'],
       foreign: ['Videsh aur yatra', 'Ghar se door rehna ya kaam karna'], spirituality: ['Dharm aur adhyatm', 'Aastha, guru, andar ka vikas'],
+      love: ['Pyar aur romance', 'Pyar, aakarshan, milna-julna, kareebi'], family: ['Parivar aur rishtedaar', 'Parivarik rishte, mata-pita, ghar ka mahaul'],
     },
     label: { strong: 'Majboot', good: 'Achha', mixed: 'Mila-jula', challenging: 'Savdhani chahiye' },
     levels: { maha: 'mahadasha', antar: 'antardasha', pratyantar: 'pratyantar dasha' },

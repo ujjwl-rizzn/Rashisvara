@@ -1,10 +1,10 @@
-/*  Jyotish engine: sidereal (Lahiri) Vedic calculations.
+/*  Rashisvara engine: sidereal (Lahiri) Vedic calculations.
     Planet positions come from astronomy-engine by Don Cross (MIT licence),
     which is copied into assets/vendor so the page never loads outside code.
     Everything in this file is plain maths: no network, no AI, no guessing. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory(require('astronomy-engine'));
-  else root.Jyotish = factory(root.Astronomy);
+  else root.RsvEngine = factory(root.Astronomy);
 })(typeof self !== 'undefined' ? self : this, function (A) {
   'use strict';
 
@@ -323,6 +323,15 @@
     });
   }
 
+  // Sidereal longitudes of the nine planets at any moment, without the speed/retrograde work.
+  // This is what the period outlooks sample many times, so it is kept light.
+  function lonsAt(utcMs) {
+    const time = A.MakeTime(new Date(utcMs));
+    const out = {};
+    for (const id of PLANETS) out[id] = lonOf(id, time);
+    return out;
+  }
+
   // Current transits against a natal chart.
   function transits(chart, nowMs) {
     const now = positionsAt(nowMs);
@@ -357,7 +366,7 @@
   return {
     PLANETS, SEVEN, SIGN_LORD, NAK_LEN, DASHA_ORDER, DASHA_YEARS, WEEKDAY_LORD, FRIENDS, EXALT, DEBIL, OWN, VARGAS,
     ayanamsa, lonOf, vargaSign, dignity, place, subPeriods, periodAt, dashaMaha, panchangAt,
-    computeChart, positionsAt, transits, dms, norm360,
+    computeChart, positionsAt, lonsAt, sunTimes, transits, dms, norm360,
     _astro: A,
   };
 });

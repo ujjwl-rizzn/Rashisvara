@@ -2,7 +2,7 @@
     Web Audio engine. There are no audio files, so there is nothing to license.
     Nothing plays until the person has tapped something, as browsers require. */
 (function (root, factory) {
-  root.JyotishSound = factory();
+  root.RsvSound = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 

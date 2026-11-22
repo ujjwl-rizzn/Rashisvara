@@ -5,7 +5,7 @@
     Shadbala or Ashtakavarga, and the app says so. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory(require('./engine.js'));
-  else root.JyotishRules = factory(root.Jyotish);
+  else root.RsvRules = factory(root.RsvEngine);
 })(typeof self !== 'undefined' ? self : this, function (E) {
   'use strict';
 
@@ -251,6 +251,10 @@
     career:       { houses: [10, 6], karakas: ['Sa', 'Su', 'Me'] },
     foreign:      { houses: [9, 12], karakas: ['Ra'] },
     spirituality: { houses: [9, 12], karakas: ['Ju', 'Ke'] },
+    // Added for the period outlooks. Love and romance: 5th house (attraction, romance) and 7th (partner), Venus and Moon.
+    love:         { houses: [5, 7],  karakas: ['Ve', 'Mo'] },
+    // Family: 2nd house (family, food, speech) and 4th (mother, home), Moon and Jupiter.
+    family:       { houses: [2, 4],  karakas: ['Mo', 'Ju'] },
   };
 
   function relatedPlanets(chart, area) {
@@ -303,5 +307,5 @@
     return Object.fromEntries(Object.keys(AREAS).map((k) => [k, areaReport(chart, k, nowMs)]));
   }
 
-  return { KENDRA, TRIKONA, DUSTHANA, UPACHAYA, ASPECTS, AREAS, yogas, functional, scoreHouse, labelFor, areaReport, allAreas, aspectsOn, activationWindows, lordsOf, isBenefic, moonBright };
+  return { KENDRA, TRIKONA, DUSTHANA, UPACHAYA, ASPECTS, AREAS, yogas, functional, scoreHouse, labelFor, areaReport, allAreas, aspectsOn, activationWindows, lordsOf, isBenefic, moonBright, relatedPlanets, DIGNITY_POINTS };
 });

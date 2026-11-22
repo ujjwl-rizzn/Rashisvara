@@ -1,6 +1,6 @@
 // Runs every test file in a fresh process and reports. Exit code 1 if anything fails.
 const { spawnSync } = require('child_process'), path = require('path');
-const files = ['engine', 'rules', 'i18n', 'reading', 'crypto', 'ai', 'security'];
+const files = ['engine', 'rules', 'ashtaka', 'outlook', 'router', 'checker', 'i18n', 'reading', 'crypto', 'ai', 'backup', 'security'];
 let failed = 0;
 for (const f of files) {
   const r = spawnSync(process.execPath, [path.join(__dirname, f + '.test.js')], { encoding: 'utf8', env: process.env });

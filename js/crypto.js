@@ -2,7 +2,7 @@
     (PBKDF2-SHA256, 600,000 rounds, then AES-256-GCM). Without the passphrase the
     saved text is useless. The passphrase itself is never stored. */
 (function (root, factory) {
-  root.JyotishCrypto = factory();
+  root.RsvCrypto = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 

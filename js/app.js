@@ -3,9 +3,9 @@
 (function () {
   'use strict';
 
-  const E = window.Jyotish, R = window.JyotishRules, I = window.JyotishI18n, TZ = window.JyotishTZ, RD = window.JyotishReading,
-    CH = window.JyotishChart, ST = window.JyotishStore, CR = window.JyotishCrypto, AI = window.JyotishAI, DOM = window.JyotishDom,
-    SND = window.JyotishSound, FX = window.JyotishFx;
+  const E = window.RsvEngine, R = window.RsvRules, I = window.RsvI18n, TZ = window.RsvTZ, RD = window.RsvReading,
+    CH = window.RsvChart, ST = window.RsvStore, CR = window.RsvCrypto, AI = window.RsvAI, DOM = window.RsvDom,
+    SND = window.RsvSound, FX = window.RsvFx, O = window.RsvOutlook, V = window.RsvOutlookView, RT = window.RsvRouter, CK = window.RsvChecker;
   const { h, render, clear, richText } = DOM;
   const $ = (id) => document.getElementById(id);
 
@@ -17,13 +17,13 @@
     }
   } catch (e) { /* cross-origin parent: treat as framed */ document.body.textContent = 'This page cannot be shown inside another website.'; return; }
 
-  const TABS = [['chart', 'tabChart'], ['dasha', 'tabDasha'], ['reading', 'tabReading'], ['ask', 'tabAsk'], ['learn', 'tabLearn'], ['settings', 'tabSettings']];
+  const TABS = [['home', 'tabHome'], ['chart', 'tabChart'], ['dasha', 'tabDasha'], ['reading', 'tabReading'], ['ask', 'tabAsk'], ['learn', 'tabLearn'], ['settings', 'tabSettings']];
   const DEFAULT_AI_LANG = { en: 'English', hi: 'Hindi', bn: 'Bengali', hn: 'Hinglish (Hindi in English letters)' };
   const HTML_LANG = { en: 'en', hi: 'hi', bn: 'bn', hn: 'en-IN' };
   const AUTO_LOCK_MS = 30 * 60 * 1000;
 
   const S = {
-    settings: ST.getSettings(), lang: 'en', tab: 'chart', varga: 1,
+    settings: ST.getSettings(), lang: 'en', tab: 'home', varga: 1, homePeriod: 'day', homeDay: '', ctx: null, ctxChart: null,
     person: null, chart: null, utc: null, editingId: null,
     chat: [], pending: false, sharedLessons: [], placeResults: [],
     session: { key: null, provider: null, remembered: false, lastUse: 0 },
@@ -81,6 +81,7 @@
     TABS.forEach(([tid]) => { $('panel-' + tid).hidden = tid !== id; });
     buildTabs();
     if (focus) $('tab-' + id).focus();
+    if (id === 'home') renderHome();
     if (id === 'reading') renderReading();
     if (id === 'dasha') renderDasha();
     if (id === 'ask') { renderAsk(); }
@@ -125,7 +126,7 @@
     return { chart: E.computeChart({ utcMs: u.utcMs, lat: p.lat, lon: p.lon, tzOffsetSec: u.offsetSec }), utc: u };
   }
   function activate(p, b) {
-    S.person = p; S.chart = b.chart; S.utc = b.utc; S.editingId = p.id; S.varga = 1;
+    S.person = p; S.chart = b.chart; S.utc = b.utc; S.editingId = p.id; S.varga = 1; S.ctx = null; S.ctxChart = null;
     S.chat = ST.getChat(p.id);
   }
   function onSubmit(ev) {
@@ -146,8 +147,7 @@
     ST.setCurrent(r.person.id);
     activate(r.person, b);
     setFormMsg(b.utc.status === 'ambiguous' ? t('tzAmbiguous') : '', b.utc.status === 'ambiguous' ? 'note' : '');
-    renderAll(); selectTab('chart'); SND.chime();
-    const out = $('chart-out'); if (out.scrollIntoView) out.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    renderAll(); selectTab('home'); SND.chime();
   }
   function fillForm(p) {
     $('f-name').value = p ? p.name : ''; $('f-date').value = p ? p.date : '';
@@ -171,7 +171,7 @@
   function deleteCurrent() {
     if (!S.person || !window.confirm(t('confirmDeletePerson'))) return;
     ST.deletePerson(S.person.id);
-    S.person = null; S.chart = null; S.utc = null; S.editingId = null; S.chat = [];
+    S.person = null; S.chart = null; S.utc = null; S.editingId = null; S.chat = []; S.ctx = null; S.ctxChart = null;
     fillForm(null); renderAll(); toast(t('personDeleted'));
   }
   function renderPeople() {
@@ -218,6 +218,13 @@
   const emptyCard = () => card(h('p', null, t('aNeedChart')));
   const timeWarn = () => h('div', { class: 'warn', role: 'note' }, t('timeUnknownWarn'));
 
+  function ashtakaCard() {
+    const a = V.ashtakaTable(S.lang, S.chart);
+    return card(h('h3', null, t('avTitle')), h('p', { class: 'hint' }, t('avHelp')),
+      h('div', { class: 'table-wrap' }, h('table', { class: 'tbl small av' },
+        h('thead', null, h('tr', null, a.head.map((x, i) => h('th', { scope: 'col', class: i >= 1 && i <= 12 && i - 1 === a.lagnaSign ? 'av-lagna' : null }, x)))),
+        h('tbody', null, a.rows.map((r, ri) => h('tr', { class: ri === a.rows.length - 1 ? 'av-total' : null }, r.map((x, i) => (i === 0 ? h('th', { scope: 'row' }, x) : h('td', null, x)))))))));
+  }
   function renderChart() {
     const out = $('chart-out');
     if (!S.chart) { render(out, card(h('div', { class: 'welcome' }, FX.mandala(120), h('p', null, t('welcome'))))); return; }
@@ -243,7 +250,52 @@
     const pcRows = RD.panchangRows(L, c, p.zone);
     const panch = card(h('h3', null, t('pTitle')), h('dl', { class: 'kv' }, pcRows.map(([k, v]) => [h('dt', null, t(k)), h('dd', null, v)])),
       h('h3', null, t('karakas')), h('p', null, RD.karakaText(L, c)));
-    render(out, head, chartCard, table, panch);
+    render(out, head, chartCard, table, panch, p.timeUnknown ? null : ashtakaCard());
+  }
+
+  // =========================================================================
+  // Home tab: day, week, month and year predictions
+  // =========================================================================
+  const PERIOD_IDS = ['day', 'week', 'month', 'year'];
+  // The slow part (Ashtakavarga and natal scoring) is done once per chart and kept.
+  function outlookCtx() {
+    if (!S.ctx || S.ctxChart !== S.chart) { S.ctx = O.makeCtx(S.chart, { zone: S.person.zone, timeUnknown: S.person.timeUnknown }); S.ctxChart = S.chart; }
+    return S.ctx;
+  }
+  const placeText = () => S.person.place || (S.person.lat.toFixed(2) + ', ' + S.person.lon.toFixed(2));
+  function meterEl(pct) { const m = h('div', { class: 'meter' }, h('i')); m.firstChild.style.setProperty('--w', pct + '%'); return m; }
+  function predCard(c, big) {
+    const slots = [];
+    if (c.best.length) slots.push(h('p', { class: 'slots good' }, h('strong', null, c.bestTitle + ': '), c.best.join(' · ')));
+    if (c.caution.length) slots.push(h('p', { class: 'slots care' }, h('strong', null, c.cautionTitle + ': '), c.caution.join(' · ')));
+    return h('article', { class: 'card area pred' + (big ? ' pred-big' : ''), 'data-area': c.key },
+      h('div', { class: 'area-head' }, h('h3', null, c.title), h('span', { class: 'badge b-' + c.labelKey }, c.label)),
+      meterEl(c.bar), h('p', null, c.sentence), slots,
+      h('details', null, h('summary', null, t('oWhy')), h('ul', null, c.lines.map((l) => h('li', null, l)))));
+  }
+  function renderHome() {
+    const out = $('home-out');
+    if (!S.chart) {
+      render(out, card(h('div', { class: 'welcome' }, FX.mandala(120), h('h2', null, t('oTitle')), h('p', null, t('oNeedChart')),
+        h('button', { type: 'button', class: 'btn btn-primary btn-big', id: 'btn-home-enter' }, t('oEnter')))));
+      return;
+    }
+    const L = S.lang, p = S.person, name = p.name || t('fNameDefault'), now = Date.now();
+    const m = V.periodModel(L, O.periodOutlook(outlookCtx(), S.homePeriod, now, 0), p.zone, placeText());
+    S.homeDay = RD.fmtDate(now, p.zone);
+    const seg = h('div', { class: 'seg seg-4', role: 'group', 'aria-label': t('oPeriodLabel') }, PERIOD_IDS.map((k) =>
+      h('button', { type: 'button', class: 'seg-btn' + (S.homePeriod === k ? ' on' : ''), 'data-period': k, 'aria-pressed': S.homePeriod === k ? 'true' : 'false' }, V.periodTitle(L, k))));
+    render(out,
+      card(h('h2', null, t('oFor', { name })), h('p', { class: 'hint' }, t('oIntro')), seg, h('p', { class: 'meta' }, m.range),
+        m.reduced ? h('div', { class: 'warn', role: 'note' }, t('oReduced')) : null),
+      predCard(m.overall, true),
+      h('div', { class: 'areas pred-grid' }, m.areas.map((c) => predCard(c, false))),
+      m.dayRows.length ? card(h('h3', null, t('oDayTitle')), h('dl', { class: 'kv' }, m.dayRows.map(([k, v]) => [h('dt', null, k), h('dd', null, v)])), h('p', { class: 'hint' }, m.dayNote)) : null,
+      m.period !== 'day' ? card(h('h3', null, t('oEvTitle')), m.events.length ? h('ul', null, m.events.map((x) => h('li', null, x))) : h('p', { class: 'hint' }, t('oEvNone'))) : null,
+      card(h('details', null, h('summary', null, t('oHowTitle')), h('ul', null, t('oHowList').map((x) => h('li', null, x)))), h('p', { class: 'hint' }, t('oNote'))),
+      card(h('div', { class: 'btn-row' },
+        h('button', { type: 'button', class: 'btn btn-primary', id: 'btn-home-ask' }, t('oAskBtn')),
+        h('button', { type: 'button', class: 'btn btn-ghost', id: 'btn-pdf' }, t('oPdf'))), h('p', { class: 'hint' }, t('oPdfHelp'))));
   }
 
   // =========================================================================
@@ -331,6 +383,7 @@
   // Every minute: refresh the live sky and the running dasha bars (only while the page is visible).
   function tick() {
     if (document.hidden || !S.chart) return;
+    if (S.tab === 'home' && S.person && RD.fmtDate(Date.now(), S.person.zone) !== S.homeDay) renderHome();   // a new day began
     if (S.tab === 'reading') renderLive();
     if (S.tab === 'dasha') { const el = $('dasha-now'); if (el) render(el, dashaNowCard()); }
   }
@@ -414,35 +467,58 @@
     S.settings = ST.setSettings({ models: { [prov]: model } });
     return model;
   }
-  function chatBubble(m) {
+  function checkNote(m) {
+    if (!m.ck) return null;
+    const text = m.ck === 'warn' ? t('ckWarn', { list: (m.ckList || []).join('; ') }) : t({ ok: 'ckOk', fixed: 'ckFixed', none: 'ckNone' }[m.ck]);
+    return h('p', { class: 'check-note ck-' + m.ck, role: 'note' }, text);
+  }
+  // An instant answer can be taken further by the AI, but only for a question the chart rules understood (never for a safety reply).
+  function canExplainMore(prev) {
+    if (!prev || prev.role !== 'user' || !getKey()) return false;   // the AI button only appears once a key is ready
+    const pr = RT.parse(prev.text, new Date().getUTCFullYear());
+    return !!pr.area && !pr.safety;
+  }
+  function chatBubble(m, prev) {
     if (m.role === 'user') return h('div', { class: 'msg-row user' }, h('div', { class: 'bubble user' }, h('span', { class: 'who' }, t('aYou')), h('p', null, m.text)));
     const body = m.pending ? h('p', { class: 'pending' }, t('aThinking')) : m.error ? h('p', { class: 'err' }, m.text) : richText(m.text);
-    const acts = m.pending || m.error ? null : h('div', { class: 'acts' },
-      h('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-good': m.id }, t('aGood')),
-      h('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-bad': m.id }, t('aBad')));
-    return h('div', { class: 'msg-row ai' }, h('div', { class: 'bubble ai' + (m.error ? ' error' : ''), 'data-id': m.id }, h('span', { class: 'who' }, t('aAstro')), body, acts));
+    let acts = null;
+    if (!m.pending && !m.error) {
+      acts = m.local
+        ? (canExplainMore(prev) ? h('div', { class: 'acts' }, h('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-deeper': m.id }, t('qaDeeper'))) : null)
+        : h('div', { class: 'acts' },
+          h('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-good': m.id }, t('aGood')),
+          h('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-bad': m.id }, t('aBad')));
+    }
+    return h('div', { class: 'msg-row ai' }, h('div', { class: 'bubble ai' + (m.error ? ' error' : '') + (m.local ? ' local' : ''), 'data-id': m.id },
+      h('span', { class: 'who' }, t('aAstro')), m.local ? h('span', { class: 'badge-local' }, t('qaBadge')) : null, body, m.pending || m.error ? null : checkNote(m), acts));
   }
   function renderChat() {
     const log = $('chat-log'); if (!log) return;
-    render(log, S.chat.length ? S.chat.map(chatBubble) : h('p', { class: 'hint' }, t('aNoMessages')));
+    render(log, S.chat.length ? S.chat.map((m, i) => chatBubble(m, S.chat[i - 1])) : h('p', { class: 'hint' }, t('aNoMessages')));
     log.scrollTop = log.scrollHeight;
   }
+  // The fact sheet: the chart facts plus this moment's outlooks, so the AI quotes the app's own numbers.
   function factsNow(person, chart) {
-    const p = person || S.person, c = chart || S.chart;
-    return RD.factsForAI(c, { nowMs: Date.now(), zone: p.zone, timeUnknown: p.timeUnknown });
+    const p = person || S.person, c = chart || S.chart, nowMs = Date.now();
+    const base = RD.factsForAI(c, { nowMs, zone: p.zone, timeUnknown: p.timeUnknown });
+    try {
+      const ctx = c === S.chart ? outlookCtx() : O.makeCtx(c, { zone: p.zone, timeUnknown: p.timeUnknown });
+      const outs = {}; PERIOD_IDS.forEach((k) => { outs[k] = O.periodOutlook(ctx, k, nowMs, 0); });
+      return base + '\n\n' + V.factsLines(c, outs, p.zone, !!p.timeUnknown).join('\n');
+    } catch (e) { return base; }
   }
-  const chatForSave = (list) => list.filter((m) => !m.error && !m.pending).map((m) => ({ role: m.role, text: m.text, ts: m.ts, id: m.id }));
+  const chatForSave = (list) => list.filter((m) => !m.error && !m.pending).map((m) => ({ role: m.role, text: m.text, ts: m.ts, id: m.id, local: m.local, ck: m.ck, ckList: m.ckList }));
   function renderAsk() {
     const out = $('ask-out');
     const draft = $('q-text') ? $('q-text').value : '';
     if (!S.chart) { render(out, emptyCard()); return; }
     const haveKey = !!getKey(); const status = !haveKey
-      ? h('div', { class: 'warn', role: 'note' }, t('aNeedKey'), ' ', h('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'btn-open-settings' }, t('aOpenSettings')))
+      ? h('p', { class: 'hint' }, t('qaNoKey'), ' ', h('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'btn-open-settings' }, t('aOpenSettings')))
       : null;
     const langSel = h('select', { id: 'ai-lang', 'aria-label': t('aLang') }, I.AI_LANGS.map((l) => h('option', { value: l, selected: l === aiLanguage() }, l)));
     const facts = h('details', { id: 'facts-box' }, h('summary', null, t('factsUsed')), h('pre', { id: 'facts-pre', class: 'facts' }), h('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'btn-copy-facts' }, t('copy')));
     render(out,
-      card(h('h2', null, t('aTitle')), h('p', { class: 'hint' }, t('aGuard')), status,
+      card(h('h2', null, t('aTitle')), h('p', null, t('qaIntro')), h('p', { class: 'hint' }, t('aGuard')), status,
         h('div', { id: 'chat-log', class: 'chat-log', 'aria-live': 'polite' }),
         h('div', { class: 'chips' }, t('aChips').map((q) => h('button', { type: 'button', class: 'chip', 'data-q': q }, q))),
         h('form', { id: 'ask-form', class: 'ask-form' },
@@ -456,29 +532,64 @@
     renderChat();
   }
   function saveChat() { if (S.person) ST.setChat(S.person.id, chatForSave(S.chat)); }
+  function pushLocal(person, chatRef, q, text) {
+    const now = Date.now();
+    chatRef.push({ role: 'user', text: q, ts: now, id: CR.randomId() });
+    chatRef.push({ role: 'ai', text, ts: now, id: CR.randomId(), local: true });
+    ST.setChat(person.id, chatForSave(chatRef));
+  }
+  // 1) the chart rules answer at once, with no key and no AI; 2) anything else goes to the AI if the person has set a key.
   async function sendQuestion(raw) {
     const q = String(raw || '').trim().slice(0, 1500);
     if (!q || S.pending) return;
     if (!S.chart) { toast(t('aNeedChart')); return; }
-    if (!S.settings.consent) { toast(t('sConsentNeeded')); selectTab('settings'); return; }
+    const person = S.person, chart = S.chart, chatRef = S.chat;
+    let quick;
+    try { quick = RT.answer(S.lang, chart, { text: q, nowMs: Date.now(), zone: person.zone, timeUnknown: person.timeUnknown, ctx: outlookCtx() }); }
+    catch (e) { quick = { kind: 'nomatch', text: t('qaNoMatch') }; }
+    const box = $('q-text');
+    if (quick.kind !== 'nomatch') { pushLocal(person, chatRef, q, quick.text); if (box) box.value = ''; renderChat(); SND.soft(); return; }
     const key = getKey();
-    if (!key) { toast(t('aNeedKey')); return; }
+    if (!key) { pushLocal(person, chatRef, q, quick.text); if (box) box.value = ''; renderChat(); return; }
+    if (!S.settings.consent) { toast(t('sConsentNeeded')); selectTab('settings'); return; }
+    await askAI(q, key);
+  }
+  function explainMore(q) {
+    if (S.pending) return;
+    const key = getKey();
+    if (!S.settings.consent) { toast(t('sConsentNeeded')); selectTab('settings'); return; }
+    if (!key) { toast(t('aNeedKey')); selectTab('settings'); return; }
+    askAI(q, key);
+  }
+  async function askAI(q, key) {
     // Remember WHICH person and chat this question belongs to. The person may switch charts while the answer is on its way,
     // and the facts sent and the reply saved must never end up on someone else's chart.
     const person = S.person, chart = S.chart, chatRef = S.chat, provider = S.settings.provider;
-    S.pending = true; $('btn-send').disabled = true;
+    S.pending = true; const sendBtn = $('btn-send'); if (sendBtn) sendBtn.disabled = true;
     chatRef.push({ role: 'user', text: q, ts: Date.now(), id: CR.randomId() });
     const pend = { role: 'ai', text: '', pending: true, id: CR.randomId(), ts: Date.now() };
-    chatRef.push(pend); renderChat(); $('q-text').value = '';
+    chatRef.push(pend); renderChat(); const box = $('q-text'); if (box) box.value = '';
     try {
       const model = await ensureModel(key);
-      const system = AI.systemPrompt({
-        facts: factsNow(person, chart), language: aiLanguage(), lessons: allLessonTexts(),
-        notes: ST.getNotes(person.id).map((n) => n.text), good: ST.getGood(),
-      });
-      const messages = chatRef.filter((m) => !m.error && !m.pending).map((m) => ({ role: m.role, text: m.text }));
-      const text = await AI.ask({ provider, model, key, system, messages });
-      pend.pending = false; pend.text = text; pend.ts = Date.now(); SND.soft();
+      const nowMs = Date.now(), facts = factsNow(person, chart);
+      const system = AI.systemPrompt({ facts, language: aiLanguage(), lessons: allLessonTexts(), notes: ST.getNotes(person.id).map((n) => n.text), good: ST.getGood() });
+      // Instant answers from the chart rules (and the questions they answered) are left out of what the AI sees: the fact sheet already holds those numbers.
+      const hist = chatRef.filter((m) => !m.error && !m.pending);
+      const messages = hist.filter((m, i) => !m.local && !(m.role === 'user' && hist[i + 1] && hist[i + 1].local)).map((m) => ({ role: m.role, text: m.text }));
+      const ask = (msgs) => AI.ask({ provider, model, key, system, messages: msgs });
+      const judge = (txt) => CK.evaluate({ text: txt, chart, nowMs, timeUnknown: person.timeUnknown, facts });
+      let text = await ask(messages), v = judge(text), status;
+      if (v.problems.length) {
+        // The answer disagrees with the chart: ask the AI once to correct it, and say so if it still does.
+        let second = null;
+        try { const t2 = await ask(messages.concat([{ role: 'ai', text }, { role: 'user', text: CK.correctionMessage(v.problems) }])); const v2 = judge(t2); if (v2.visible) second = { text: t2, v: v2 }; } catch (e) { second = null; }
+        if (second && !second.v.problems.length) { text = second.text; v = second.v; status = 'fixed'; }
+        else { if (second && second.v.problems.length <= v.problems.length) { text = second.text; v = second.v; } status = 'warn'; }
+      } else status = v.checked > 0 ? 'ok' : 'none';
+      if (!v.visible) throw new AI.AIError('empty', 'Empty answer');
+      pend.pending = false; pend.text = v.visible; pend.ts = Date.now(); pend.ck = status;
+      if (status === 'warn') pend.ckList = v.problems.slice(0, 5).map((x) => CK.describe(S.lang, x)).filter(Boolean);
+      SND.soft();
     } catch (e) {
       pend.pending = false; pend.error = true; pend.text = t('aError', { msg: errText(e) });
     } finally {
@@ -488,8 +599,11 @@
     }
   }
   function onChatClick(ev) {
-    const g = ev.target.closest('[data-good]'), b = ev.target.closest('[data-bad]');
-    if (g) {
+    const g = ev.target.closest('[data-good]'), b = ev.target.closest('[data-bad]'), dp = ev.target.closest('[data-deeper]');
+    if (dp) {
+      const i = S.chat.findIndex((m) => m.id === dp.getAttribute('data-deeper'));
+      if (i > 0 && S.chat[i - 1].role === 'user') explainMore(S.chat[i - 1].text);
+    } else if (g) {
       const i = S.chat.findIndex((m) => m.id === g.getAttribute('data-good'));
       if (i > 0 && S.chat[i - 1].role === 'user') { ST.addGood(S.chat[i - 1].text, S.chat[i].text); toast(t('aSaved')); g.disabled = true; }
     } else if (b) {
@@ -521,7 +635,7 @@
           h('label', { class: 'field' }, h('span', null, t('themeLabel')), h('select', { id: 's-theme' }, [['dark', 'themeDark'], ['light', 'themeLight']].map(([v, k]) => h('option', { value: v, selected: v === S.settings.theme }, t(k)))))),
         h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 's-sound', checked: S.settings.sound }), h('span', null, t('sSound'))),
         h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 's-ambient', checked: S.settings.ambient }), h('span', null, t('sTone')))),
-      card(h('h2', null, t('sProvider')),
+      card(h('h2', null, t('sProvider')), h('p', { class: 'hint' }, t('sKeyOptional')),
         h('label', { class: 'field' }, h('span', null, t('sProvider')), h('select', { id: 's-provider' }, Object.keys(AI.PROVIDERS).map((k) => h('option', { value: k, selected: k === prov }, AI.PROVIDERS[k].name)))),
         h('p', { class: 'hint' }, t('sKeyHelp'), ' ', h('a', { href: P.keyUrl, target: '_blank', rel: 'noopener noreferrer' }, t('sGetKey') + ' (' + P.name + ')')),
         h('p', { class: 'status', id: 's-key-status' }, keyStatusText()),
@@ -540,8 +654,13 @@
         h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 's-consent', checked: S.settings.consent }), h('span', null, t('sConsent')))),
       card(h('h2', null, t('privacyTitle')), bullets('privacyList')),
       card(h('h2', null, t('aboutTitle')), bullets('aboutList')),
-      card(h('div', { class: 'btn-row' }, h('button', { type: 'button', class: 'btn btn-ghost', id: 'btn-export' }, t('sExport')),
-        h('button', { type: 'button', class: 'btn btn-danger', id: 'btn-wipe' }, t('sDelete')))));
+      card(h('h2', null, t('bkTitle')), h('p', { class: 'hint' }, t('bkHelp')),
+        h('div', { class: 'btn-row' }, h('button', { type: 'button', class: 'btn btn-primary', id: 'btn-export' }, t('bkDownload'))),
+        h('div', { class: 'field', role: 'radiogroup', 'aria-label': t('bkModeLabel') }, h('span', null, t('bkModeLabel')),
+          h('label', { class: 'check' }, h('input', { type: 'radio', name: 'bk-mode', value: 'merge', checked: true }), h('span', null, t('bkMerge'))),
+          h('label', { class: 'check' }, h('input', { type: 'radio', name: 'bk-mode', value: 'replace' }), h('span', null, t('bkReplace')))),
+        h('div', { class: 'btn-row' }, h('label', { class: 'btn btn-ghost file-btn' }, t('bkRestore'), h('input', { type: 'file', id: 'bk-file', accept: 'application/json,.json', class: 'sr-only' })))),
+      card(h('div', { class: 'btn-row' }, h('button', { type: 'button', class: 'btn btn-danger', id: 'btn-wipe' }, t('sDelete')))));
   }
   async function useKey() {
     const prov = S.settings.provider, key = $('s-key').value.trim(), remember = $('s-remember').checked, pass = $('s-pass').value;
@@ -582,9 +701,96 @@
       msg.textContent = t('sModelsOk', { n: ids.length });
     } catch (e) { msg.textContent = errText(e); }
   }
+  // Restore from a backup file: size-checked, rebuilt field by field in store.js, and confirmed by the person with the counts shown.
+  async function importBackup(file) {
+    if (!file) return;
+    if (file.size > ST.MAX_BACKUP) { toast(t('bkTooBig')); return; }
+    let text;
+    try { text = await file.text(); } catch (e) { toast(t('bkBad')); return; }
+    const r = ST.parseBackup(text);
+    if (!r.ok) { toast(t(r.error === 'big' ? 'bkTooBig' : 'bkBad')); return; }
+    const b = r.backup, picked = document.querySelector('input[name="bk-mode"]:checked');
+    const mode = picked && picked.value === 'replace' ? 'replace' : 'merge';
+    const counts = { p: b.people.length, l: b.lessons.length, n: Object.values(b.notes).reduce((a, x) => a + x.length, 0) };
+    if (!window.confirm(t(mode === 'replace' ? 'bkConfirmReplace' : 'bkConfirmMerge', counts))) return;
+    const res = ST.restore(b, mode);
+    if (!res.ok) { toast(t('errStore')); return; }
+    // show what is now stored: settings, the active person and every open screen
+    S.settings = ST.getSettings(); S.lang = S.settings.lang;
+    applyTheme(); SND.setEnabled(S.settings.sound); if (!S.settings.sound) SND.setAmbient(false);
+    $('lang').value = S.lang; applyStatic(); buildTabs();
+    const people = ST.getPeople(), has = (id) => !!id && people.some((x) => x.id === id);
+    const keep = S.person && has(S.person.id) ? S.person.id : (has(ST.getCurrent()) ? ST.getCurrent() : null);
+    if (keep) loadPerson(keep); else { S.person = null; S.chart = null; S.utc = null; S.editingId = null; S.chat = []; S.ctx = null; S.ctxChart = null; fillForm(null); renderAll(); }
+    renderSettings(); toast(t('bkDone', { p: res.added.people, l: res.added.lessons, n: res.added.notes, c: res.added.chats }));
+  }
   function wipeAll() {
     if (!window.confirm(t('sDeleteSure'))) return;
     ST.wipeAll(); S.session = { key: null, provider: null, remembered: false, lastUse: 0 }; window.location.reload();
+  }
+
+  // =========================================================================
+  // PDF report: built on demand, then the browser's own "Save as PDF" prints it. Page 1 is the predictions summary.
+  // =========================================================================
+  function buildReport() {
+    const L = S.lang, p = S.person, c = S.chart, zone = p.zone, now = Date.now(), ctx = outlookCtx();
+    const name = p.name || t('fNameDefault');
+    const models = {}; PERIOD_IDS.forEach((k) => { models[k] = V.periodModel(L, O.periodOutlook(ctx, k, now, 0), zone, placeText()); });
+    const keys = ['overall'].concat(O.AREA_KEYS);
+    const tbl = (head, rows, cls) => h('table', { class: cls || null },
+      h('thead', null, h('tr', null, head.map((x) => h('th', { scope: 'col' }, x)))),
+      h('tbody', null, rows.map((r) => h('tr', null, r.map((x, i) => (i === 0 ? h('th', { scope: 'row' }, x) : h('td', null, x)))))));
+    const matrix = h('table', { class: 'rp-matrix' },
+      h('thead', null, h('tr', null, h('th', { scope: 'col' }, t('oPeriodLabel')), PERIOD_IDS.map((k) => h('th', { scope: 'col' }, models[k].title, h('div', { class: 'rp-small' }, models[k].range))))),
+      h('tbody', null, keys.map((key) => h('tr', null, h('th', { scope: 'row' }, models.day.cards[key].title),
+        PERIOD_IDS.map((k) => h('td', { class: models[k].cards[key].labelKey === 'strong' ? 'rp-lab-strong' : null }, models[k].cards[key].label))))));
+    const born = p.date + (p.timeUnknown ? '' : ' ' + p.time) + (p.place ? ' · ' + p.place : '') + ' · ' + t('tzUsed', { off: TZ.offsetLabel(S.utc.offsetSec), zone });
+    const page1 = h('section', { class: 'rp-keep' },
+      h('h1', null, t('rpTitle') + ' · ' + name),
+      h('p', { class: 'rp-sub' }, t('rpBirth') + ': ' + born + ' · ' + t('rpPrepared', { date: RD.fmtDate(now, zone) })),
+      h('h2', null, t('rpGlance')), matrix,
+      models.day.reduced ? h('p', { class: 'rp-small' }, t('oReduced')) : null,
+      h('p', { class: 'rp-small' }, models.day.dayRows.map(([k, v]) => k + ': ' + v).join(' · ')),
+      h('p', { class: 'rp-small' }, t('oNote')),
+      h('p', { class: 'rp-small' }, t('rpDisclaimer')));
+
+    // page 2 onward: the chart behind the numbers
+    const style = S.settings.chartStyle;
+    const chartSvg = CH.render(style, c, 1, L, t('chartFor', { name }) + ' · ' + t('v1'), 'D1');
+    const rows = RD.planetRows(L, c);
+    const planets = tbl(['thPlanet', 'thSign', 'thDeg', 'thNak', 'thPada', 'thHouse', 'thState'].map((k) => t(k)), rows.map((r) => [r.name, r.sign, r.deg, r.nak, String(r.pada), String(r.house), r.state]));
+    const pc = RD.panchangRows(L, c, zone);
+    const cur = E.periodAt(c.dasha, now);
+    const dashaRows = cur ? [[t('dMaha'), cur.maha], [t('dAntar'), cur.antar], [t('dPraty'), cur.pratyantar]].filter((x) => x[1]).map(([lv, d]) => [lv, nm.planet(L, d.lord), RD.fmtDate(d.start, zone) + ' – ' + RD.fmtDate(d.end, zone)]) : [];
+    const nextSubs = cur ? E.subPeriods(cur.maha).filter((a) => a.end > now).map((a) => [nm.planet(L, a.lord), RD.fmtDate(Math.max(a.start, now), zone), RD.fmtDate(a.end, zone)]) : [];
+    const yv = R.yogas(c).map((y) => RD.yogaView(L, c, y));
+    const page2 = h('section', { class: 'rp-break' },
+      h('h2', null, t('rpChartHead')), p.timeUnknown ? h('p', { class: 'rp-small' }, t('timeUnknownWarn')) : null,
+      h('div', { class: 'rp-chart rp-keep' }, chartSvg),
+      h('p', { class: 'rp-small' }, t('cLagna') + ': ' + nm.sign(L, c.asc.sign) + ' ' + E.dms(c.asc.deg)),
+      planets,
+      h('h3', null, t('pTitle')), tbl([t('pTitle'), ''], pc.map(([k, v]) => [t(k), v])),
+      h('h3', null, t('karakas')), h('p', null, RD.karakaText(L, c)));
+    const page3 = h('section', { class: 'rp-break' },
+      h('h2', null, t('rpDasha')), dashaRows.length ? tbl([t('dNow'), t('thPlanet'), ''], dashaRows) : null,
+      nextSubs.length ? h('div', { class: 'rp-keep' }, h('h3', null, t('dAntar')), tbl([t('dAntar'), t('dStart'), t('dEnd')], nextSubs)) : null,
+      p.timeUnknown ? null : (() => {
+        const a = V.ashtakaTable(L, c);
+        return h('div', { class: 'rp-keep' }, h('h2', null, t('avTitle')), h('p', { class: 'rp-small' }, t('avHelp')), tbl(a.head, a.rows, 'rp-matrix'));
+      })(),
+      h('h2', null, t('rYogas')), yv.length ? yv.map((v) => h('div', { class: 'rp-keep' }, h('h3', null, v.name), h('p', null, v.text))) : h('p', null, t('rNoYogas')),
+      h('p', { class: 'rp-small' }, t('rpDisclaimer')), h('p', { class: 'rp-small' }, t('rpMadeWith')));
+    return [page1, page2, page3];
+  }
+  function printReport() {
+    if (!S.chart) { toast(t('aNeedChart')); return; }
+    const box = $('report');
+    try { render(box, buildReport()); } catch (e) { clear(box); toast(t('rpFail')); return; }
+    const old = document.title, who = String(S.person.name || 'report').replace(/[^\p{L}\p{N} _-]/gu, '').trim().slice(0, 40) || 'report';
+    document.title = 'Rashisvara - ' + who + ' - ' + todayStr();
+    const done = () => { document.title = old; clear(box); window.removeEventListener('afterprint', done); };
+    window.addEventListener('afterprint', done);
+    window.print();
   }
 
   // =========================================================================
@@ -592,6 +798,7 @@
   // =========================================================================
   function renderAll() {
     renderPeople(); renderChart();
+    if (S.tab === 'home') renderHome();
     if (S.tab === 'dasha') renderDasha();
     if (S.tab === 'reading') renderReading();
     if (S.tab === 'ask') renderAsk();
@@ -619,6 +826,19 @@
       else if (e.key === 'End') { e.preventDefault(); selectTab(TABS[TABS.length - 1][0], true); }
     });
 
+    // home tab
+    $('home-out').addEventListener('click', (e) => {
+      const pb = e.target.closest('[data-period]');
+      if (pb) {
+        const k = pb.getAttribute('data-period');
+        if (PERIOD_IDS.includes(k)) { S.homePeriod = k; renderHome(); SND.tap(); const again = $('home-out').querySelector('[data-period="' + k + '"]'); if (again) again.focus(); }
+        return;
+      }
+      if (e.target.closest('#btn-home-enter')) selectTab('chart');
+      else if (e.target.closest('#btn-home-ask')) selectTab('ask');
+      else if (e.target.closest('#btn-pdf')) printReport();
+    });
+
     // chart tab
     $('chart-out').addEventListener('click', (e) => {
       const st = e.target.closest('[data-style]');
@@ -644,7 +864,7 @@
     // teach tab
     $('teach-out').addEventListener('click', (e) => {
       if (e.target.closest('#btn-add-lesson')) { const v = $('lesson-text').value; if (v.trim()) { ST.addLesson(v); renderTeach(); toast(t('aSaved')); } return; }
-      if (e.target.closest('#btn-export-lessons')) { download('jyotish-lessons.json', { lessons: ST.getLessons().map((l) => l.text) }); return; }
+      if (e.target.closest('#btn-export-lessons')) { download('rashisvara-lessons.json', { lessons: ST.getLessons().map((l) => l.text) }); return; }
       const dl = e.target.closest('[data-del-lesson]');
       if (dl) { ST.setLessons(ST.getLessons().filter((l) => l.id !== dl.getAttribute('data-del-lesson'))); renderTeach(); return; }
       if (e.target.closest('#btn-add-note') && S.person) {
@@ -671,6 +891,7 @@
         if (v === '' || ST.MODEL_RE.test(v)) S.settings = ST.setSettings({ models: { [S.settings.provider]: v } }); else toast(t('errModelName'));
       }
     });
+    $('settings-out').addEventListener('change', (e) => { if (e.target.id === 'bk-file') { importBackup(e.target.files && e.target.files[0]); e.target.value = ''; } });
     $('settings-out').addEventListener('click', (e) => {
       const id = (e.target.closest('button') || {}).id;
       if (id === 'btn-use-key') useKey();
@@ -678,7 +899,7 @@
       else if (id === 'btn-lock') { S.session = { key: null, provider: null, remembered: false, lastUse: 0 }; renderSettings(); }
       else if (id === 'btn-forget') { ST.setKeyBlob(S.settings.provider, null); S.session = { key: null, provider: null, remembered: false, lastUse: 0 }; renderSettings(); }
       else if (id === 'btn-models') loadModels();
-      else if (id === 'btn-export') download('jyotish-data.json', ST.exportAll());
+      else if (id === 'btn-export') download('rashisvara-backup-' + todayStr() + '.json', ST.exportAll());
       else if (id === 'btn-wipe') wipeAll();
     });
 
@@ -701,7 +922,7 @@
     TABS.forEach(([id]) => { $('panel-' + id).hidden = id !== S.tab; });
     wire();
     const cur = ST.getCurrent();
-    if (cur && ST.getPeople().some((p) => p.id === cur)) loadPerson(cur); else { renderPeople(); renderChart(); }
+    if (cur && ST.getPeople().some((p) => p.id === cur)) loadPerson(cur); else { renderPeople(); renderChart(); renderHome(); }
     loadSharedLessons();
   }
   init();

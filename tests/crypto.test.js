@@ -1,7 +1,7 @@
 // Key encryption round trip (Node has the same Web Crypto API as the browser).
 const assert = require('assert');
 global.window = global; global.self = global;
-require('../js/crypto.js'); const C = global.JyotishCrypto;
+require('../js/crypto.js'); const C = global.RsvCrypto;
 (async () => {
   const blob = await C.encrypt('correct horse battery', 'AIzaFAKEKEY1234567890');
   assert(C.validBlob(blob) && blob.iter === 600000 && !JSON.stringify(blob).includes('FAKEKEY'));

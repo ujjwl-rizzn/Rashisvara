@@ -2,7 +2,7 @@
     Please have a native speaker read the Hindi and Bengali once and fix anything that sounds odd. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) factory(require('./i18n.js'));
-  else factory(root.JyotishI18n);
+  else factory(root.RsvI18n);
 })(typeof self !== 'undefined' ? self : this, function (I) {
   'use strict';
 

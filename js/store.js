@@ -1,16 +1,25 @@
 /*  Storage. Everything lives in this browser (localStorage) and nowhere else.
     Anything read back is treated as untrusted: it is checked and trimmed before use. */
 (function (root, factory) {
-  root.JyotishStore = factory(root.JyotishI18n, root.JyotishCrypto);
+  root.RsvStore = factory(root.RsvI18n, root.RsvCrypto);
 })(typeof self !== 'undefined' ? self : this, function (I, C) {
   'use strict';
 
-  const NS = 'jyo1:';
+  const NS = 'rsv1:';
   const ID_RE = /^[a-z0-9]{6,32}$/;
   const PROVIDERS = ['gemini', 'groq', 'openrouter'];
   const mem = new Map();
   let ls = null;
   try { ls = window.localStorage; ls.setItem(NS + 't', '1'); ls.removeItem(NS + 't'); } catch (e) { ls = null; }
+
+  // One-time move from the storage name used before the app was renamed, so nothing saved earlier is lost.
+  try {
+    if (ls) {
+      const OLD = 'jyo1:', old = [];
+      for (let i = 0; i < ls.length; i++) { const k = ls.key(i); if (k && k.startsWith(OLD)) old.push(k); }
+      for (const k of old) { const nk = NS + k.slice(OLD.length); if (ls.getItem(nk) === null) ls.setItem(nk, ls.getItem(k)); ls.removeItem(k); }
+    }
+  } catch (e) { /* storage blocked: nothing to move */ }
 
   function rawGet(k) { try { return ls ? ls.getItem(NS + k) : (mem.has(k) ? mem.get(k) : null); } catch (e) { return null; } }
   function rawSet(k, v) { try { if (ls) ls.setItem(NS + k, v); else mem.set(k, v); return true; } catch (e) { return false; } }
@@ -36,8 +45,7 @@
   function defaults() {
     return { lang: guessLang(), theme: 'dark', sound: true, ambient: false, provider: 'gemini', aiLang: '', chartStyle: 'north', consent: false, models: { gemini: '', groq: '', openrouter: '' } };
   }
-  function getSettings() {
-    const d = defaults(); const r = readJSON('settings');
+  function cleanSettings(r, d) {
     if (!r || typeof r !== 'object') return d;
     const models = {};
     for (const p of PROVIDERS) { const m = r.models && typeof r.models === 'object' ? r.models[p] : ''; models[p] = typeof m === 'string' && MODEL_RE.test(m) ? m : ''; }
@@ -51,6 +59,7 @@
       consent: bool(r.consent, false), models,
     };
   }
+  function getSettings() { return cleanSettings(readJSON('settings'), defaults()); }
   function setSettings(patch) {
     const cur = getSettings();
     const next = Object.assign({}, cur, patch, { models: Object.assign({}, cur.models, (patch && patch.models) || {}) });
@@ -91,18 +100,33 @@
     if (r && typeof r === 'object' && !Array.isArray(r)) for (const key of Object.keys(r)) if (ID_RE.test(key)) out[key] = r[key];
     return out;
   }
-  function getChat(pid) {
-    return arr(readMap('chats')[pid], 40).map((m) => ({ role: m && m.role === 'ai' ? 'ai' : 'user', text: str(m && m.text, 6000), ts: ts(m && m.ts), id: ID_RE.test(m && m.id) ? m.id : C.randomId() })).filter((m) => m.text);
+  const okId = (v) => typeof v === 'string' && ID_RE.test(v);
+  const CK_STATUS = ['ok', 'fixed', 'warn', 'none'];
+  // Chat messages: only known fields survive. "local" marks an instant answer from the chart rules, "ck" is the fact-check result.
+  function cleanChat(list, max) {
+    return arr(list, max).map((m) => {
+      if (!m || typeof m !== 'object') return null;
+      const o = { role: m.role === 'ai' ? 'ai' : 'user', text: str(m.text, 6000), ts: ts(m.ts), id: okId(m.id) ? m.id : C.randomId() };
+      if (o.role === 'ai' && m.local === true) o.local = true;
+      if (o.role === 'ai' && CK_STATUS.includes(m.ck)) {
+        o.ck = m.ck;
+        const l = arr(m.ckList, 6).map((x) => str(x, 200)).filter(Boolean);
+        if (l.length) o.ckList = l;
+      }
+      return o.text ? o : null;
+    }).filter(Boolean);
   }
-  function setChat(pid, list) { const all = readMap('chats'); all[pid] = list.slice(-30); writeJSON('chats', all); }
-  function getNotes(pid) {
-    return arr(readMap('notes')[pid], 30).map((n) => ({ id: ID_RE.test(n && n.id) ? n.id : C.randomId(), text: str(n && n.text, 240), ts: ts(n && n.ts) })).filter((n) => n.text);
+  function cleanNotes(list, max) {
+    return arr(list, max).map((n) => (n && typeof n === 'object' ? { id: okId(n.id) ? n.id : C.randomId(), text: str(n.text, 240), ts: ts(n.ts) } : null)).filter((n) => n && n.text);
   }
-  function setNotes(pid, list) { const all = readMap('notes'); all[pid] = list.slice(0, 30); writeJSON('notes', all); }
+  function getChat(pid) { return cleanChat(readMap('chats')[pid], 40); }
+  function setChat(pid, list) { const all = readMap('chats'); all[pid] = cleanChat(Array.isArray(list) ? list.slice(-30) : [], 30); writeJSON('chats', all); }
+  function getNotes(pid) { return cleanNotes(readMap('notes')[pid], 30); }
+  function setNotes(pid, list) { const all = readMap('notes'); all[pid] = cleanNotes(list, 30); writeJSON('notes', all); }
 
   // ---- lessons and liked answers -------------------------------------------
   function cleanLessons(v, max) {
-    return arr(v, max).map((l) => ({ id: ID_RE.test(l && l.id) ? l.id : C.randomId(), text: str(typeof l === 'string' ? l : l && l.text, 300).trim(), ts: ts(l && l.ts) })).filter((l) => l.text);
+    return arr(v, max).map((l) => ({ id: okId(l && l.id) ? l.id : C.randomId(), text: str(typeof l === 'string' ? l : l && l.text, 300).trim(), ts: ts(l && l.ts) })).filter((l) => l.text);
   }
   function getLessons() { return cleanLessons(readJSON('lessons'), 50); }
   function setLessons(list) { return writeJSON('lessons', cleanLessons(list, 50)); }
@@ -113,7 +137,8 @@
     list.push({ id: C.randomId(), text: t, ts: Date.now() });
     return setLessons(list.slice(-50));
   }
-  function getGood() { return arr(readJSON('good'), 10).map((g) => ({ q: str(g && g.q, 300), a: str(g && g.a, 700), ts: ts(g && g.ts) })).filter((g) => g.q && g.a); }
+  function cleanGood(v) { return arr(v, 10).map((g) => ({ q: str(g && g.q, 300), a: str(g && g.a, 700), ts: ts(g && g.ts) })).filter((g) => g.q && g.a); }
+  function getGood() { return cleanGood(readJSON('good')); }
   function addGood(q, a) { const l = getGood(); l.push({ q: str(q, 300), a: str(a, 700), ts: Date.now() }); return writeJSON('good', l.slice(-10)); }
 
   // ---- encrypted AI keys (one per provider) --------------------------------
@@ -133,12 +158,84 @@
   // ---- whole-device actions -------------------------------------------------
   const KEYS = ['settings', 'people', 'current', 'chats', 'notes', 'lessons', 'good', 'keys'];
   function wipeAll() { KEYS.forEach(rawDel); mem.clear(); }
+  // Everything the person saved, without the AI keys and without the consent tick (that must be given again on each device).
   function exportAll() {
-    return { app: 'rashisvara', version: 1, exportedAt: new Date().toISOString(), settings: getSettings(), people: getPeople(), lessons: getLessons(),
-      notes: readMap('notes'), chats: readMap('chats'), note: 'Saved AI keys are never included in exports.' };
+    const set = getSettings(); delete set.consent;
+    const people = getPeople(), ids = people.map((p) => p.id);
+    const pick = (m, fn, n) => { const o = {}; for (const id of ids) { const l = fn(m[id], n); if (l.length) o[id] = l; } return o; };
+    return { app: 'rashisvara', version: 2, exportedAt: new Date().toISOString(), settings: set, current: getCurrent(), people, lessons: getLessons(), good: getGood(),
+      notes: pick(readMap('notes'), cleanNotes, 30), chats: pick(readMap('chats'), cleanChat, 40), note: 'Saved AI keys are never included in exports.' };
+  }
+
+  // ---- restoring a backup ---------------------------------------------------
+  // A backup file is untrusted input: it is size-limited, parsed, and rebuilt field by field. Nothing from it is ever
+  // copied across as it is, and it can never set the AI keys or the consent tick.
+  const MAX_BACKUP = 2 * 1024 * 1024;
+  function cleanMap(v, fn) {
+    const out = {};
+    if (v && typeof v === 'object' && !Array.isArray(v)) for (const k of Object.keys(v).slice(0, 200)) if (ID_RE.test(k)) { const l = fn(v[k]); if (l.length) out[k] = l; }
+    return out;
+  }
+  function parseBackup(text) {
+    const bad = { ok: false, error: 'bad' };
+    if (typeof text !== 'string') return bad;
+    if (text.length > MAX_BACKUP) return { ok: false, error: 'big' };
+    let d; try { d = JSON.parse(text); } catch (e) { return bad; }
+    if (!d || typeof d !== 'object' || Array.isArray(d) || d.app !== 'rashisvara' || !(d.version >= 1 && d.version <= 2)) return bad;
+    const people = [], seen = new Set();
+    for (const p of arr(d.people, 50)) { const c = cleanPerson(p); if (c && !seen.has(c.id)) { seen.add(c.id); people.push(c); } }
+    const mine = (m) => { const o = {}; for (const k of Object.keys(m)) if (seen.has(k)) o[k] = m[k]; return o; };
+    const backup = {
+      people, lessons: cleanLessons(d.lessons, 50), good: cleanGood(d.good),
+      notes: mine(cleanMap(d.notes, (l) => cleanNotes(l, 30))), chats: mine(cleanMap(d.chats, (l) => cleanChat(l, 40))),
+      settings: d.settings && typeof d.settings === 'object' ? cleanSettings(d.settings, getSettings()) : null,
+      current: typeof d.current === 'string' && seen.has(d.current) ? d.current : null,
+    };
+    if (!backup.people.length && !backup.lessons.length && !backup.good.length) return bad;
+    return { ok: true, backup };
+  }
+  const personSig = (p) => [p.name, p.date, p.time, p.timeUnknown, p.lat, p.lon, p.zone].join('|');
+  function restore(b, mode) {
+    let ok = true;
+    const w = (k, v) => { if (!writeJSON(k, v)) ok = false; };
+    const added = { people: 0, lessons: 0, notes: 0, chats: 0 };
+    if (mode === 'replace') {
+      const people = b.people.slice(0, 50), ids = new Set(people.map((p) => p.id));
+      const only = (m) => { const o = {}; for (const k of Object.keys(m)) if (ids.has(k)) o[k] = m[k]; return o; };
+      w('people', people); w('lessons', b.lessons); w('good', b.good); w('notes', only(b.notes)); w('chats', only(b.chats));
+      if (b.settings) { const cur = getSettings(); w('settings', Object.assign({}, b.settings, { consent: cur.consent })); }
+      if (b.current && ids.has(b.current)) rawSet('current', b.current); else rawDel('current');
+      added.people = people.length; added.lessons = b.lessons.length;
+      added.notes = Object.values(b.notes).reduce((a, l) => a + l.length, 0); added.chats = Object.keys(only(b.chats)).length;
+      return { ok, added };
+    }
+    // merge: only add what is not here yet
+    const have = getPeople(), haveIds = new Set(have.map((p) => p.id)), haveSig = new Set(have.map(personSig));
+    const fresh = b.people.filter((p) => !haveIds.has(p.id) && !haveSig.has(personSig(p))).slice(0, Math.max(0, 50 - have.length));
+    const freshIds = new Set(fresh.map((p) => p.id));
+    if (fresh.length) w('people', have.concat(fresh));
+    const notes = readMap('notes'), chats = readMap('chats');
+    for (const id of Object.keys(b.notes)) {
+      if (freshIds.has(id)) { notes[id] = b.notes[id]; added.notes += b.notes[id].length; }
+      else if (haveIds.has(id)) {
+        const cur = cleanNotes(notes[id], 30), texts = new Set(cur.map((n) => n.text));
+        const more = b.notes[id].filter((n) => !texts.has(n.text));
+        if (more.length) { notes[id] = cur.concat(more).slice(0, 30); added.notes += more.length; }
+      }
+    }
+    for (const id of Object.keys(b.chats)) if (freshIds.has(id) || (haveIds.has(id) && !cleanChat(chats[id], 40).length)) { chats[id] = b.chats[id].slice(-30); added.chats++; }
+    if (added.notes) w('notes', notes);
+    if (added.chats) w('chats', chats);
+    const les = getLessons(), lt = new Set(les.map((l) => l.text)), newL = b.lessons.filter((l) => !lt.has(l.text));
+    if (newL.length) { w('lessons', cleanLessons(les.concat(newL), 200).slice(-50)); added.lessons = newL.length; }
+    const gd = getGood(), gq = new Set(gd.map((g) => g.q)), newG = b.good.filter((g) => !gq.has(g.q));
+    if (newG.length) w('good', gd.concat(newG).slice(-10));
+    added.people = fresh.length;
+    if (!getCurrent() && b.current && (freshIds.has(b.current) || haveIds.has(b.current))) rawSet('current', b.current);
+    return { ok, added };
   }
   function persistent() { return !!ls; }
 
   return { getSettings, setSettings, getPeople, savePerson, deletePerson, getCurrent, setCurrent, getChat, setChat, getNotes, setNotes,
-    getLessons, setLessons, addLesson, getGood, addGood, getKeyBlob, setKeyBlob, wipeAll, exportAll, persistent, cleanLessons, validZone, MODEL_RE };
+    getLessons, setLessons, addLesson, getGood, addGood, getKeyBlob, setKeyBlob, wipeAll, exportAll, parseBackup, restore, MAX_BACKUP, persistent, cleanLessons, cleanChat, cleanNotes, validZone, MODEL_RE };
 });

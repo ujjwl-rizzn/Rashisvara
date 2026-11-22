@@ -2,7 +2,7 @@
     Text always goes in as text nodes, never as HTML, so nothing typed by a user
     or returned by an AI can become code. Dangerous attributes are refused. */
 (function (root, factory) {
-  root.JyotishDom = factory();
+  root.RsvDom = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 

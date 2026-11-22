@@ -1,6 +1,6 @@
 // Every language must have every word. No gaps, no leftover placeholders, same placeholders as English.
 const assert = require('assert'), fs = require('fs');
-const I = require('../js/i18n.js'); require('../js/i18n-extra.js');
+const I = require('../js/i18n.js'); require('../js/i18n-extra.js'); require('../js/i18n-outlook.js');
 const T = I.T, EN = T.en, langs = Object.keys(T);
 const ph = (s) => (String(s).match(/\{\w+\}/g) || []).sort().join(',');
 
@@ -27,14 +27,19 @@ for (const l of langs) {
 }
 // Same language names for both Hindi spellings of the sign short names are allowed to repeat; only planets must be unique above.
 
-// Every key the screen code asks for must exist
-const src = fs.readFileSync(__dirname + '/../js/app.js', 'utf8') + fs.readFileSync(__dirname + '/../index.html', 'utf8');
+// Every key the code asks for must exist. All script files and the page are scanned.
+const dir = __dirname + '/../js/', files = fs.readdirSync(dir).filter((f) => f.endsWith('.js') && !/^i18n/.test(f) && f !== 'outlook-cal.js');
+const src = files.map((f) => fs.readFileSync(dir + f, 'utf8')).join('\n') + fs.readFileSync(__dirname + '/../index.html', 'utf8');
 const keys = new Set();
-for (const m of src.matchAll(/\bt\('([A-Za-z0-9_]+)'/g)) keys.add(m[1]);
+for (const m of src.matchAll(/\b(?:t|ui)\((?:[A-Za-z]+,\s*)?'([A-Za-z0-9_]+)'/g)) keys.add(m[1]);
 for (const m of src.matchAll(/data-i18n(?:-ph|-aria)?="([A-Za-z0-9_]+)"/g)) keys.add(m[1]);
-for (const m of src.matchAll(/'((?:tab|tone|err|aErr|th|s|p|d|c|f|l|r|a)[A-Z][A-Za-z0-9]*)'/g)) if (EN.ui[m[1]] !== undefined) keys.add(m[1]);
-['v1', 'v3', 'v7', 'v9', 'v10', 'v12', 'cNorth', 'cSouth', 'tzMissing', 'tzAmbiguous', 'errDate', 'errTime', 'errLat', 'errLon', 'errTz'].forEach((k) => keys.add(k));
-keys.delete('v');
+for (const m of src.matchAll(/'((?:tab|tone|err|aErr|th|s|p|d|c|f|l|r|a|o|qa|ck|bk|rp|av)[A-Z][A-Za-z0-9]*)'/g)) if (EN.ui[m[1]] !== undefined) keys.add(m[1]);
+// keys that the code builds from parts
+['v1', 'v3', 'v7', 'v9', 'v10', 'v12', 'cNorth', 'cSouth', 'tzMissing', 'tzAmbiguous', 'errDate', 'errTime', 'errLat', 'errLon', 'errTz',
+  'oBestDays', 'oBestMonths', 'oCautionDays', 'oCautionMonths', 'oDay', 'oWeek', 'oMonth', 'oYear', 'oOverall',
+  'oThCareer', 'oThWealth', 'oThLove', 'oThMarriage', 'oThFamily', 'oThHealth', 'oThEducation', 'oThForeign', 'oThSpirituality', 'oThOverall',
+  'oSentStrong', 'oSentGood', 'oSentMixed', 'oSentChallenging', 'ckOk', 'ckFixed', 'ckWarn', 'ckNone', 'ckTime', 'ckDate'].forEach((k) => keys.add(k));
+keys.delete('v'); keys.delete('oBest'); keys.delete('oCaution');   // prefixes; the full names are listed above
 const missing = [...keys].filter((k) => EN.ui[k] === undefined);
 assert.deepStrictEqual(missing, [], 'screen code uses keys that do not exist: ' + missing.join(', '));
 console.log('i18n: ' + langs.length + ' languages complete; ' + Object.keys(EN.ui).length + ' screen strings, ' + keys.size + ' keys checked against the code');

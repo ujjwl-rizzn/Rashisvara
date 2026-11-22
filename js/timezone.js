@@ -5,7 +5,7 @@
     database for the exact birth date, never assumed from today's rule. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.JyotishTZ = factory();
+  else root.RsvTZ = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
