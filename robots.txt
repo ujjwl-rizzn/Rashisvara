@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://ujjwl-rizzn.github.io/Rashisvara/sitemap.xml
