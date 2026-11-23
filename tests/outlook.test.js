@@ -23,7 +23,7 @@ for (const p of ['day', 'week', 'month', 'year']) {
     assert(v.pct >= 0 && v.pct <= 100, 'pct ' + v.pct);
     assert(['strong', 'good', 'mixed', 'challenging'].includes(v.label));
     assert.strictEqual(O.labelOf(v.pct), v.label);
-    assert(v.tr.length <= 3 && v.tr.every((x) => E.PLANETS.includes(x.planet) && x.hMoon >= 1 && x.hMoon <= 12));
+    assert(v.tr.length <= 4 && v.tr.every((x) => E.PLANETS.includes(x.planet) && x.hMoon >= 1 && x.hMoon <= 12));
     if (p !== 'day') {
       const bs = new Set(v.best.map((x) => x.t)); assert(v.caution.every((x) => !bs.has(x.t)), 'best and caution must not overlap');
       for (const x of v.best.concat(v.caution)) assert(x.t >= r.start && x.t < r.end, 'slot inside the window');

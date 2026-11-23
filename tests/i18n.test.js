@@ -1,6 +1,6 @@
 // Every language must have every word. No gaps, no leftover placeholders, same placeholders as English.
 const assert = require('assert'), fs = require('fs');
-const I = require('../js/i18n.js'); require('../js/i18n-extra.js'); require('../js/i18n-outlook.js');
+const I = require('../js/i18n.js'); require('../js/i18n-extra.js'); require('../js/i18n-outlook.js'); require('../js/i18n-explain.js');
 const T = I.T, EN = T.en, langs = Object.keys(T);
 const ph = (s) => (String(s).match(/\{\w+\}/g) || []).sort().join(',');
 
@@ -39,6 +39,12 @@ for (const m of src.matchAll(/'((?:tab|tone|err|aErr|th|s|p|d|c|f|l|r|a|o|qa|ck|
   'oBestDays', 'oBestMonths', 'oCautionDays', 'oCautionMonths', 'oDay', 'oWeek', 'oMonth', 'oYear', 'oOverall',
   'oThCareer', 'oThWealth', 'oThLove', 'oThMarriage', 'oThFamily', 'oThHealth', 'oThEducation', 'oThForeign', 'oThSpirituality', 'oThOverall',
   'oSentStrong', 'oSentGood', 'oSentMixed', 'oSentChallenging', 'ckOk', 'ckFixed', 'ckWarn', 'ckNone', 'ckTime', 'ckDate'].forEach((k) => keys.add(k));
+// explanation keys the code builds from parts: one per area, per planet role and so on
+['career', 'wealth', 'love', 'marriage', 'family', 'health', 'education', 'foreign', 'spirituality', 'overall'].forEach((a) => keys.add('xEx_' + a));
+['karaka', 'ruler', 'moves', 'general'].forEach((r) => keys.add('xRole_' + r));
+['xLearnTable', 'xLearnChart', 'xLearnPanchang', 'xLearnKaraka', 'xLearnAv', 'xLearnVarga', 'xLearnYoga', 'xLearnAreas', 'xLearnLive', 'xLearnHome', 'xStateGood', 'xStateBad', 'xStateMid', 'xLinkYes', 'xLinkNo',
+  'xDayLordVara', 'xDayLordNak', 'xBgDay', 'xBgLong', 'xDig', 'xWho', 'xPGood', 'xPBad', 'xDashaTheme', 'xChandra', 'xTaraMeaning', 'xRashiTrait', 'xEvTieYes', 'xEvTieNo', 'xEvBeforeBirth', 'xEvFuture'].forEach((k) => keys.add(k));
+keys.delete('xRole_'); keys.delete('xEx_');
 keys.delete('v'); keys.delete('oBest'); keys.delete('oCaution');   // prefixes; the full names are listed above
 const missing = [...keys].filter((k) => EN.ui[k] === undefined);
 assert.deepStrictEqual(missing, [], 'screen code uses keys that do not exist: ' + missing.join(', '));

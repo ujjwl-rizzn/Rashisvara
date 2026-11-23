@@ -5,7 +5,7 @@
 
   const E = window.RsvEngine, R = window.RsvRules, I = window.RsvI18n, TZ = window.RsvTZ, RD = window.RsvReading,
     CH = window.RsvChart, ST = window.RsvStore, CR = window.RsvCrypto, AI = window.RsvAI, DOM = window.RsvDom,
-    SND = window.RsvSound, FX = window.RsvFx, O = window.RsvOutlook, V = window.RsvOutlookView, RT = window.RsvRouter, CK = window.RsvChecker;
+    SND = window.RsvSound, FX = window.RsvFx, O = window.RsvOutlook, V = window.RsvOutlookView, RT = window.RsvRouter, CK = window.RsvChecker, EX = window.RsvExplain;
   const { h, render, clear, richText } = DOM;
   const $ = (id) => document.getElementById(id);
 
@@ -17,7 +17,7 @@
     }
   } catch (e) { /* cross-origin parent: treat as framed */ document.body.textContent = 'This page cannot be shown inside another website.'; return; }
 
-  const TABS = [['home', 'tabHome'], ['chart', 'tabChart'], ['dasha', 'tabDasha'], ['reading', 'tabReading'], ['ask', 'tabAsk'], ['learn', 'tabLearn'], ['settings', 'tabSettings']];
+  const TABS = [['home', 'tabHome'], ['chart', 'tabChart'], ['dasha', 'tabDasha'], ['reading', 'tabReading'], ['understand', 'tabUnderstand'], ['ask', 'tabAsk'], ['learn', 'tabLearn'], ['settings', 'tabSettings']];
   const DEFAULT_AI_LANG = { en: 'English', hi: 'Hindi', bn: 'Bengali', hn: 'Hinglish (Hindi in English letters)' };
   const HTML_LANG = { en: 'en', hi: 'hi', bn: 'bn', hn: 'en-IN' };
   const AUTO_LOCK_MS = 30 * 60 * 1000;
@@ -84,6 +84,7 @@
     if (id === 'home') renderHome();
     if (id === 'reading') renderReading();
     if (id === 'dasha') renderDasha();
+    if (id === 'understand') renderUnderstand();
     if (id === 'ask') { renderAsk(); }
     if (id === 'learn') renderTeach();
     if (id === 'settings') renderSettings();
@@ -100,7 +101,8 @@
     try { all = Intl.supportedValuesOf('timeZone'); } catch (e) { all = []; }
     return Array.from(new Set(extra.concat(all)));
   }
-  function deviceZone() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; } }
+  // India only for now: the form starts on Indian Standard Time. (Picking a place from the search also sets its own zone.)
+  const DEFAULT_ZONE = 'Asia/Kolkata';
   function todayStr() { return new Date().toLocaleDateString('en-CA'); }
 
   function setFormMsg(text, kind) { const el = $('form-msg'); el.textContent = text || ''; el.className = 'msg' + (kind ? ' ' + kind : ''); }
@@ -113,6 +115,7 @@
     const zone = $('f-tz').value.trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < '1900-01-01' || date > todayStr()) return { error: 'errDate' };
     if (!/^\d{2}:\d{2}$/.test(time)) return { error: 'errTime' };
+    if (!Number.isFinite(lat) && !Number.isFinite(lon) && $('f-place').value.trim()) return { error: 'nNeedPick' };
     if (!Number.isFinite(lat) || lat < -90 || lat > 90) return { error: 'errLat' };
     if (!Number.isFinite(lon) || lon < -180 || lon > 180) return { error: 'errLon' };
     if (!ST.validZone(zone)) return { error: 'errTz' };
@@ -154,7 +157,7 @@
     $('f-time').value = p && !p.timeUnknown ? p.time : ''; $('f-time-unknown').checked = !!(p && p.timeUnknown);
     $('f-time').disabled = !!(p && p.timeUnknown);
     $('f-place').value = p ? p.place : ''; $('f-lat').value = p ? String(p.lat) : ''; $('f-lon').value = p ? String(p.lon) : '';
-    $('f-tz').value = p ? p.zone : deviceZone();
+    $('f-tz').value = p ? p.zone : DEFAULT_ZONE;
     clear($('place-results')); $('place-msg').textContent = ''; setFormMsg('');
   }
   function loadPerson(id) {
@@ -172,13 +175,18 @@
     if (!S.person || !window.confirm(t('confirmDeletePerson'))) return;
     ST.deletePerson(S.person.id);
     S.person = null; S.chart = null; S.utc = null; S.editingId = null; S.chat = []; S.ctx = null; S.ctxChart = null;
-    fillForm(null); renderAll(); toast(t('personDeleted'));
+    fillForm(null);
+    // another saved person is shown next, so the page is never left empty while charts are still saved
+    const rest = ST.getPeople();
+    if (rest.length) { const next = rest[0]; fillForm(next); const b = buildChart(next); if (!b.error) { ST.setCurrent(next.id); activate(next, b); } }
+    renderAll(); toast(t('personDeleted'));
   }
   function renderPeople() {
     const people = ST.getPeople();
     render($('people-select'), [h('option', { value: '' }, '+ ' + t('newPerson'))].concat(people.map((p) =>
       h('option', { value: p.id, selected: S.editingId === p.id }, (p.name || t('fNameDefault')) + ' · ' + p.date))));
     $('people-select').value = S.editingId || '';
+    $('btn-delete-form').hidden = !(S.person && S.editingId === S.person.id);
   }
 
   // ---- place search (Open-Meteo geocoding; only the typed place name is sent) ----
@@ -190,7 +198,7 @@
     msg.textContent = t('loading');
     const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 15000);
     try {
-      const url = 'https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(q.slice(0, 100)) + '&count=8&format=json&language=' + (S.lang === 'hn' ? 'en' : S.lang);
+      const url = 'https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(q.slice(0, 100)) + '&count=8&format=json&countryCode=IN&language=' + (S.lang === 'hn' ? 'en' : S.lang);
       const res = await fetch(url, { signal: ctl.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
       if (!res.ok) throw new Error('http ' + res.status);
       const data = await res.json();
@@ -217,10 +225,13 @@
   const card = (...kids) => h('section', { class: 'card' }, kids);
   const emptyCard = () => card(h('p', null, t('aNeedChart')));
   const timeWarn = () => h('div', { class: 'warn', role: 'note' }, t('timeUnknownWarn'));
+  const bullets = (list) => h('ul', null, list.map((x) => h('li', null, x)));
+  // A plain "what is this" box under a screen. Text that is a list (like the divisional charts) becomes bullets.
+  const learnBox = (key, extra) => { const v = t(key); return h('div', { class: 'learn' }, Array.isArray(v) ? bullets(v) : h('p', null, v), extra || null); };
 
   function ashtakaCard() {
     const a = V.ashtakaTable(S.lang, S.chart);
-    return card(h('h3', null, t('avTitle')), h('p', { class: 'hint' }, t('avHelp')),
+    return card(h('h3', null, t('avTitle')), h('p', { class: 'hint' }, t('avHelp')), learnBox('xLearnAv'),
       h('div', { class: 'table-wrap' }, h('table', { class: 'tbl small av' },
         h('thead', null, h('tr', null, a.head.map((x, i) => h('th', { scope: 'col', class: i >= 1 && i <= 12 && i - 1 === a.lagnaSign ? 'av-lagna' : null }, x)))),
         h('tbody', null, a.rows.map((r, ri) => h('tr', { class: ri === a.rows.length - 1 ? 'av-total' : null }, r.map((x, i) => (i === 0 ? h('th', { scope: 'row' }, x) : h('td', null, x)))))))));
@@ -242,14 +253,15 @@
         h('button', { type: 'button', class: 'seg-btn' + (style === k ? ' on' : ''), 'data-style': k, 'aria-pressed': style === k ? 'true' : 'false' }, t(k === 'north' ? 'cNorth' : 'cSouth')))),
       h('select', { id: 'varga-select', 'aria-label': t('cVarga') }, E.VARGAS.map((v) => h('option', { value: v, selected: S.varga === v }, t('v' + v)))));
     const chartCard = card(controls, h('div', { class: 'chart-wrap' }, svg),
-      h('p', { class: 'hint' }, t('cLagna') + ': ' + nm.sign(L, c.asc.sign) + ' ' + E.dms(c.asc.deg)));
+      h('p', { class: 'hint' }, t('cLagna') + ': ' + nm.sign(L, c.asc.sign) + ' ' + E.dms(c.asc.deg)),
+      learnBox('xLearnChart', bullets(t('xLearnVarga'))));
     const rows = RD.planetRows(L, c);
-    const table = card(h('div', { class: 'table-wrap' }, h('table', { class: 'tbl' },
+    const table = card(learnBox('xLearnTable'), h('div', { class: 'table-wrap' }, h('table', { class: 'tbl' },
       h('thead', null, h('tr', null, ['thPlanet', 'thSign', 'thDeg', 'thNak', 'thPada', 'thHouse', 'thState'].map((k) => h('th', { scope: 'col' }, t(k))))),
       h('tbody', null, rows.map((r) => h('tr', null, h('th', { scope: 'row' }, r.name), h('td', null, r.sign), h('td', null, r.deg), h('td', null, r.nak), h('td', null, String(r.pada)), h('td', null, String(r.house)), h('td', null, r.state)))))));
     const pcRows = RD.panchangRows(L, c, p.zone);
-    const panch = card(h('h3', null, t('pTitle')), h('dl', { class: 'kv' }, pcRows.map(([k, v]) => [h('dt', null, t(k)), h('dd', null, v)])),
-      h('h3', null, t('karakas')), h('p', null, RD.karakaText(L, c)));
+    const panch = card(h('h3', null, t('pTitle')), h('dl', { class: 'kv' }, pcRows.map(([k, v]) => [h('dt', null, t(k)), h('dd', null, v)])), learnBox('xLearnPanchang'),
+      h('h3', null, t('karakas')), h('p', null, RD.karakaText(L, c)), learnBox('xLearnKaraka'));
     render(out, head, chartCard, table, panch, p.timeUnknown ? null : ashtakaCard());
   }
 
@@ -270,8 +282,9 @@
     if (c.caution.length) slots.push(h('p', { class: 'slots care' }, h('strong', null, c.cautionTitle + ': '), c.caution.join(' · ')));
     return h('article', { class: 'card area pred' + (big ? ' pred-big' : ''), 'data-area': c.key },
       h('div', { class: 'area-head' }, h('h3', null, c.title), h('span', { class: 'badge b-' + c.labelKey }, c.label)),
-      meterEl(c.bar), h('p', null, c.sentence), slots,
-      h('details', null, h('summary', null, t('oWhy')), h('ul', null, c.lines.map((l) => h('li', null, l)))));
+      meterEl(c.bar), h('p', null, c.sentence),
+      c.example ? h('div', { class: 'example' }, h('strong', null, c.exampleHead + ' '), c.example) : null, slots,
+      h('details', null, h('summary', null, t('oWhy')), h('ul', null, c.lines.map((l) => h('li', null, l))), h('p', { class: 'recent' }, t('xRecentCheck'))));
   }
   function renderHome() {
     const out = $('home-out');
@@ -281,13 +294,18 @@
       return;
     }
     const L = S.lang, p = S.person, name = p.name || t('fNameDefault'), now = Date.now();
-    const m = V.periodModel(L, O.periodOutlook(outlookCtx(), S.homePeriod, now, 0), p.zone, placeText());
+    const raw = O.periodOutlook(outlookCtx(), S.homePeriod, now, 0);
+    const m = V.periodModel(L, raw, p.zone, placeText());
+    const ras = EX.rashi(L, S.chart, !!p.timeUnknown), mt = EX.moonToday(L, raw);
     S.homeDay = RD.fmtDate(now, p.zone);
     const seg = h('div', { class: 'seg seg-4', role: 'group', 'aria-label': t('oPeriodLabel') }, PERIOD_IDS.map((k) =>
       h('button', { type: 'button', class: 'seg-btn' + (S.homePeriod === k ? ' on' : ''), 'data-period': k, 'aria-pressed': S.homePeriod === k ? 'true' : 'false' }, V.periodTitle(L, k))));
     render(out,
       card(h('h2', null, t('oFor', { name })), h('p', { class: 'hint' }, t('oIntro')), seg, h('p', { class: 'meta' }, m.range),
         m.reduced ? h('div', { class: 'warn', role: 'note' }, t('oReduced')) : null),
+      h('section', { class: 'card rashi-card' }, h('h3', null, ras.title), bullets(ras.lines)),
+      h('section', { class: 'card moon-card ' + (mt.good ? 'good' : 'care') }, h('h3', null, mt.title), bullets(mt.lines)),
+      learnBox('xLearnHome'),
       predCard(m.overall, true),
       h('div', { class: 'areas pred-grid' }, m.areas.map((c) => predCard(c, false))),
       m.dayRows.length ? card(h('h3', null, t('oDayTitle')), h('dl', { class: 'kv' }, m.dayRows.map(([k, v]) => [h('dt', null, k), h('dd', null, v)])), h('p', { class: 'hint' }, m.dayNote)) : null,
@@ -295,7 +313,19 @@
       card(h('details', null, h('summary', null, t('oHowTitle')), h('ul', null, t('oHowList').map((x) => h('li', null, x)))), h('p', { class: 'hint' }, t('oNote'))),
       card(h('div', { class: 'btn-row' },
         h('button', { type: 'button', class: 'btn btn-primary', id: 'btn-home-ask' }, t('oAskBtn')),
-        h('button', { type: 'button', class: 'btn btn-ghost', id: 'btn-pdf' }, t('oPdf'))), h('p', { class: 'hint' }, t('oPdfHelp'))));
+        h('button', { type: 'button', class: 'btn btn-ghost', id: 'btn-home-understand' }, t('xTitle')),
+        h('button', { type: 'button', class: 'btn btn-ghost', id: 'btn-pdf' }, t('oPdf'))), h('p', { class: 'hint' }, t('oPdfHelp'))),
+      manageCard());
+  }
+  // Switch between saved people, add another person, or delete this one: all from the front page.
+  function manageCard() {
+    const people = ST.getPeople();
+    return card(h('h3', null, t('nHomeManage')), h('p', { class: 'hint' }, t('nHomeManageHelp')),
+      h('label', { class: 'field' }, h('span', null, t('nPickPerson')),
+        h('select', { id: 'home-people' }, people.map((x) => h('option', { value: x.id, selected: S.person && S.person.id === x.id }, (x.name || t('fNameDefault')) + ' · ' + x.date)))),
+      h('div', { class: 'btn-row' },
+        h('button', { type: 'button', class: 'btn btn-primary', id: 'btn-home-another' }, t('nAnother')),
+        h('button', { type: 'button', class: 'btn btn-danger', id: 'btn-home-delete' }, t('nDeleteHome'))));
   }
 
   // =========================================================================
@@ -324,6 +354,7 @@
       const subs = E.subPeriods(m);
       return h('details', { class: 'dasha-item' + (isNow ? ' now' : ''), open: isNow },
         h('summary', null, h('strong', null, nm.planet(L, m.lord)), ' ', RD.fmtDate(Math.max(m.start, born), zone) + ' – ' + RD.fmtDate(m.end, zone)),
+        bullets([EX.dashaTheme(L, m.lord)].concat(S.person.timeUnknown ? [] : [EX.dashaWhy(L, c, m.lord)])),
         h('div', { class: 'table-wrap' }, h('table', { class: 'tbl small' },
           h('thead', null, h('tr', null, h('th', { scope: 'col' }, t('dAntar')), h('th', { scope: 'col' }, t('dStart')), h('th', { scope: 'col' }, t('dEnd')))),
           h('tbody', null, subs.map((a) => h('tr', { class: cur && cur.antar && cur.antar.start === a.start && isNow ? 'now' : '' },
@@ -331,8 +362,9 @@
     });
     render(out,
       card(h('h2', null, t('dTitle')), h('p', null, t('dBalance', { lord: nm.planet(L, c.dasha.balance.lord), years: c.dasha.balance.years.toFixed(2) })),
-        S.person.timeUnknown ? timeWarn() : null, h('p', { class: 'hint' }, t('dNote'))),
-      h('div', { id: 'dasha-now' }, dashaNowCard()), list);
+        S.person.timeUnknown ? timeWarn() : null, h('p', { class: 'hint' }, t('dNote')), learnBox('xDashaWhat')),
+      h('div', { id: 'dasha-now' }, dashaNowCard()),
+      (() => { const tl = EX.timeline(L, c, now, zone); return tl.notes.length ? card(h('h3', null, t('xSecNow')), bullets(tl.notes), h('p', { class: 'hint' }, tl.ageNote)) : null; })(), list);
   }
 
   // =========================================================================
@@ -359,11 +391,11 @@
     const yv = yogas.map((y) => RD.yogaView(L, c, y));
     render(out,
       S.person.timeUnknown ? timeWarn() : null,
-      card(h('h2', null, t('rTitle')), h('p', { class: 'hint' }, t('rNote'))),
+      card(h('h2', null, t('rTitle')), h('p', { class: 'hint' }, t('rNote')), learnBox('xLearnAreas')),
       h('div', { class: 'areas' }, views.map(areaCard)),
-      card(h('h2', null, t('rYogas')), yv.length ? yv.map((v) => h('article', { class: 'yoga tone-' + v.tone },
+      card(h('h2', null, t('rYogas')), learnBox('xLearnYoga'), yv.length ? yv.map((v) => h('article', { class: 'yoga tone-' + v.tone },
         h('h4', null, v.name, ' ', h('span', { class: 'tone' }, t(TONE_LABEL[v.tone]))), h('p', null, v.text))) : h('p', null, t('rNoYogas'))),
-      card(h('h2', null, t('rTransit')), h('div', { id: 'live-card' })));
+      card(h('h2', null, t('rTransit')), learnBox('xLearnLive'), h('div', { id: 'live-card' })));
     renderLive();
   }
   function renderLive() {
@@ -386,6 +418,79 @@
     if (S.tab === 'home' && S.person && RD.fmtDate(Date.now(), S.person.zone) !== S.homeDay) renderHome();   // a new day began
     if (S.tab === 'reading') renderLive();
     if (S.tab === 'dasha') { const el = $('dasha-now'); if (el) render(el, dashaNowCard()); }
+  }
+
+  // =========================================================================
+  // Understand tab: the chart in plain words, life periods, why now, and the person's own life events
+  // =========================================================================
+  const YM_OK = /^(19|20)\d\d-(0[1-9]|1[0-2])$/;
+  function eventsCard() {
+    const L = S.lang, c = S.chart, p = S.person, unk = !!p.timeUnknown, now = Date.now();
+    const areaName = (k) => t('xAreaNames')[ST.EVENT_AREAS.indexOf(k)];
+    const list = ST.getEvents(p.id).slice().sort((a, b) => (a.ym < b.ym ? 1 : a.ym > b.ym ? -1 : 0));
+    const bornYm = new Date(c.input.utcMs).toISOString().slice(0, 7), nowYm = new Date(now).toISOString().slice(0, 7);
+    const items = list.map((ev) => {
+      const r = EX.eventLink(L, c, ev, unk, now);
+      if (r.error) return h('div', { class: 'ev-item' }, h('h4', null, ev.ym + ' · ' + areaName(ev.area), h('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-del-event': ev.id }, t('xEvDel'))), h('p', { class: 'hint' }, t(r.error)));
+      const body = r.lines.slice(0, -1), verdict = r.lines[r.lines.length - 1];
+      return h('div', { class: 'ev-item' },
+        h('h4', null, ev.ym + ' · ' + areaName(ev.area), h('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-del-event': ev.id }, t('xEvDel'))),
+        bullets(body), h('p', { class: 'ev-link ev-' + r.level }, verdict));
+    });
+    return card(h('h2', null, t('xSecEvents')), h('p', null, t('xEvIntro')),
+      h('div', { class: 'ev-form' },
+        h('label', { class: 'field' }, h('span', null, t('xEvMonth')), h('input', { id: 'ev-month', type: 'month', min: bornYm, max: nowYm, placeholder: 'YYYY-MM' })),
+        h('label', { class: 'field' }, h('span', null, t('xEvArea')), h('select', { id: 'ev-area' }, ST.EVENT_AREAS.map((k) => h('option', { value: k }, areaName(k))))),
+        h('label', { class: 'field wide' }, h('span', null, t('xEvText')), h('input', { id: 'ev-text', type: 'text', maxlength: '120', placeholder: t('xEvTextPh') }))),
+      h('div', { class: 'btn-row' }, h('button', { type: 'button', class: 'btn btn-primary', id: 'btn-add-event' }, t('xEvAdd'))),
+      items.length ? [h('div', null, items), h('p', { class: 'hint' }, t('xEvCaution'))] : h('p', { class: 'hint' }, t('xEvNone')));
+  }
+  function renderUnderstand() {
+    const out = $('understand-out');
+    const head = card(h('h2', null, t('xTitle')), h('p', null, t('xIntro')));
+    if (!S.chart) { render(out, head, card(h('p', null, t('xNeedChart')))); return; }
+    const c = S.chart, L = S.lang, p = S.person, unk = !!p.timeUnknown, zone = p.zone, now = Date.now();
+    const ras = EX.rashi(L, c, unk);
+    const who = [h('section', { class: 'card rashi-card' }, h('h3', null, ras.title), bullets(ras.lines))];
+    if (unk) who.push(card(h('p', null, t('xNeedTime'))));
+    else {
+      const a = EX.ascendant(L, c);
+      who.push(card(h('h3', null, a.head), bullets(a.lines), h('p', { class: 'hint' }, t('xHousesNote')),
+        h('ul', { class: 'houses' }, EX.housesGuide(L).map((x) => h('li', null, h('b', null, x.h + '.'), x.text)))));
+    }
+    const planets = h('div', { class: 'ugrid' }, EX.planetCards(L, c, unk).map((pc) => h('article', { class: 'card ucard' }, h('h3', null, pc.head), bullets(pc.lines))));
+    let timeline;
+    if (unk) timeline = card(h('p', null, t('xNeedTime')));
+    else {
+      const tl = EX.timeline(L, c, now, zone);
+      timeline = [tl.items.map((it) => h('article', { class: 'tl-item tl-' + it.status },
+        h('h3', null, it.planet, h('span', { class: 'tl-tag' }, it.statusText)), h('p', { class: 'hint' }, it.range), bullets(it.lines))),
+      h('p', { class: 'hint' }, tl.ageNote)];
+    }
+    let nowLines = [];
+    try {
+      const year = unk ? null : O.periodOutlook(outlookCtx(), 'year', now, 0);
+      if (!unk) nowLines = EX.timeline(L, c, now, zone).notes;
+      nowLines = nowLines.concat(EX.nowSummary(L, c, year, now).lines);
+    } catch (e) { nowLines = []; }
+    render(out, head,
+      h('h2', { class: 'sec' }, t('xSecWho')), who,
+      h('h2', { class: 'sec' }, t('xSecPlanets')), planets,
+      h('h2', { class: 'sec' }, t('xSecTimeline')), timeline,
+      nowLines.length ? card(h('h2', null, t('xSecNow')), bullets(nowLines)) : null,
+      eventsCard());
+  }
+  function addEvent() {
+    if (!S.person || !S.chart) return;
+    const ym = $('ev-month').value.trim(), area = $('ev-area').value, text = $('ev-text').value.trim().slice(0, 120);
+    if (!YM_OK.test(ym) || !ST.EVENT_AREAS.includes(area)) { toast(t('xEvBad')); return; }
+    const r = EX.eventLink(S.lang, S.chart, { ym, area, text }, !!S.person.timeUnknown, Date.now());
+    if (r.error) { toast(t(r.error)); return; }
+    const list = ST.getEvents(S.person.id);
+    if (list.length >= 30) { toast(t('xEvMany')); return; }
+    list.push({ id: CR.randomId(), ym, area, text });
+    if (!ST.setEvents(S.person.id, list)) { toast(t('errStore')); return; }
+    renderUnderstand(); SND.soft();
   }
 
   // =========================================================================
@@ -476,7 +581,7 @@
   function canExplainMore(prev) {
     if (!prev || prev.role !== 'user' || !getKey()) return false;   // the AI button only appears once a key is ready
     const pr = RT.parse(prev.text, new Date().getUTCFullYear());
-    return !!pr.area && !pr.safety;
+    return !!(pr.area || pr.topic) && !pr.safety;
   }
   function chatBubble(m, prev) {
     if (m.role === 'user') return h('div', { class: 'msg-row user' }, h('div', { class: 'bubble user' }, h('span', { class: 'who' }, t('aYou')), h('p', null, m.text)));
@@ -512,13 +617,10 @@
     const out = $('ask-out');
     const draft = $('q-text') ? $('q-text').value : '';
     if (!S.chart) { render(out, emptyCard()); return; }
-    const haveKey = !!getKey(); const status = !haveKey
-      ? h('p', { class: 'hint' }, t('qaNoKey'), ' ', h('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'btn-open-settings' }, t('aOpenSettings')))
-      : null;
     const langSel = h('select', { id: 'ai-lang', 'aria-label': t('aLang') }, I.AI_LANGS.map((l) => h('option', { value: l, selected: l === aiLanguage() }, l)));
     const facts = h('details', { id: 'facts-box' }, h('summary', null, t('factsUsed')), h('pre', { id: 'facts-pre', class: 'facts' }), h('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'btn-copy-facts' }, t('copy')));
     render(out,
-      card(h('h2', null, t('aTitle')), h('p', null, t('qaIntro')), h('p', { class: 'hint' }, t('aGuard')), status,
+      card(h('h2', null, t('aTitle')), h('p', null, t('qaIntro')), h('p', { class: 'hint' }, t('aGuard')),
         h('div', { id: 'chat-log', class: 'chat-log', 'aria-live': 'polite' }),
         h('div', { class: 'chips' }, t('aChips').map((q) => h('button', { type: 'button', class: 'chip', 'data-q': q }, q))),
         h('form', { id: 'ask-form', class: 'ask-form' },
@@ -748,6 +850,7 @@
     const page1 = h('section', { class: 'rp-keep' },
       h('h1', null, t('rpTitle') + ' · ' + name),
       h('p', { class: 'rp-sub' }, t('rpBirth') + ': ' + born + ' · ' + t('rpPrepared', { date: RD.fmtDate(now, zone) })),
+      h('p', { class: 'rp-small' }, EX.rashi(L, c, !!p.timeUnknown).lines.slice(0, 2).join(' ')),
       h('h2', null, t('rpGlance')), matrix,
       models.day.reduced ? h('p', { class: 'rp-small' }, t('oReduced')) : null,
       h('p', { class: 'rp-small' }, models.day.dayRows.map(([k, v]) => k + ': ' + v).join(' · ')),
@@ -780,7 +883,12 @@
       })(),
       h('h2', null, t('rYogas')), yv.length ? yv.map((v) => h('div', { class: 'rp-keep' }, h('h3', null, v.name), h('p', null, v.text))) : h('p', null, t('rNoYogas')),
       h('p', { class: 'rp-small' }, t('rpDisclaimer')), h('p', { class: 'rp-small' }, t('rpMadeWith')));
-    return [page1, page2, page3];
+    // last pages: the chart in plain words (what each planet is, who it stands for, why it matters here)
+    const plain = h('section', { class: 'rp-break' }, h('h2', null, t('xPrint')),
+      EX.planetCards(L, c, !!p.timeUnknown).map((pc) => h('div', { class: 'rp-keep' }, h('h3', null, pc.head), h('ul', { class: 'rp-plain' }, pc.lines.map((l) => h('li', null, l))))),
+      p.timeUnknown ? null : (() => { const tl = EX.timeline(L, c, now, zone); return tl.notes.length ? h('div', { class: 'rp-keep' }, h('h3', null, t('xSecNow')), h('ul', { class: 'rp-plain' }, tl.notes.map((l) => h('li', null, l)))) : null; })(),
+      h('p', { class: 'rp-small' }, t('rpDisclaimer')));
+    return [page1, page2, page3, plain];
   }
   function printReport() {
     if (!S.chart) { toast(t('aNeedChart')); return; }
@@ -801,6 +909,7 @@
     if (S.tab === 'home') renderHome();
     if (S.tab === 'dasha') renderDasha();
     if (S.tab === 'reading') renderReading();
+    if (S.tab === 'understand') renderUnderstand();
     if (S.tab === 'ask') renderAsk();
     if (S.tab === 'learn') renderTeach();
     if (S.tab === 'settings') renderSettings();
@@ -814,6 +923,7 @@
     $('f-time-unknown').addEventListener('change', (e) => { $('f-time').disabled = e.target.checked; });
     $('people-select').addEventListener('change', (e) => { if (e.target.value) loadPerson(e.target.value); else newPerson(); });
     $('btn-new').addEventListener('click', newPerson);
+    $('btn-delete-form').addEventListener('click', deleteCurrent);
     $('lang').addEventListener('change', (e) => setLang(e.target.value));
     $('btn-theme').addEventListener('click', () => setTheme(S.settings.theme === 'dark' ? 'light' : 'dark'));
     $('btn-sound').addEventListener('click', () => setSound(!S.settings.sound));
@@ -835,9 +945,14 @@
         return;
       }
       if (e.target.closest('#btn-home-enter')) selectTab('chart');
+      else if (e.target.closest('#btn-home-another')) { newPerson(); selectTab('chart'); $('f-name').focus(); }
+      else if (e.target.closest('#btn-home-delete')) deleteCurrent();
+      else if (e.target.closest('#btn-home-understand')) selectTab('understand');
       else if (e.target.closest('#btn-home-ask')) selectTab('ask');
       else if (e.target.closest('#btn-pdf')) printReport();
     });
+
+    $('home-out').addEventListener('change', (e) => { if (e.target.id === 'home-people' && e.target.value) loadPerson(e.target.value); });
 
     // chart tab
     $('chart-out').addEventListener('click', (e) => {
@@ -851,7 +966,6 @@
     $('ask-out').addEventListener('click', (e) => {
       const chip = e.target.closest('[data-q]');
       if (chip) { sendQuestion(chip.getAttribute('data-q')); return; }
-      if (e.target.closest('#btn-open-settings')) { selectTab('settings'); return; }
       if (e.target.closest('#btn-clear-chat')) { if (window.confirm(t('aClearSure'))) { S.chat = []; saveChat(); renderChat(); } return; }
       if (e.target.closest('#btn-copy-facts')) { const txt = $('facts-pre').textContent; if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => toast(t('copied')), () => {}); return; }
       onChatClick(e);
@@ -860,6 +974,13 @@
     $('ask-out').addEventListener('keydown', (e) => { if (e.target.id === 'q-text' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendQuestion(e.target.value); } });
     $('ask-out').addEventListener('change', (e) => { if (e.target.id === 'ai-lang' && I.AI_LANGS.includes(e.target.value)) S.settings = ST.setSettings({ aiLang: e.target.value }); });
     $('ask-out').addEventListener('toggle', (e) => { if (e.target.id === 'facts-box' && e.target.open && S.chart) $('facts-pre').textContent = factsNow(); }, true);
+
+    // understand tab
+    $('understand-out').addEventListener('click', (e) => {
+      if (e.target.closest('#btn-add-event')) { addEvent(); return; }
+      const d = e.target.closest('[data-del-event]');
+      if (d && S.person) { ST.setEvents(S.person.id, ST.getEvents(S.person.id).filter((x) => x.id !== d.getAttribute('data-del-event'))); renderUnderstand(); }
+    });
 
     // teach tab
     $('teach-out').addEventListener('click', (e) => {
@@ -915,15 +1036,24 @@
     render($('tz-list'), tzOptions().map((z) => h('option', { value: z })));
     $('f-date').setAttribute('max', todayStr());
     $('logo').appendChild(FX.mandala(44));
-    FX.startSky($('sky'));
     SND.setEnabled(S.settings.sound);
-    $('f-tz').value = deviceZone();
+    $('f-tz').value = DEFAULT_ZONE;
     applyStatic(); buildTabs();
     TABS.forEach(([id]) => { $('panel-' + id).hidden = id !== S.tab; });
     wire();
-    const cur = ST.getCurrent();
-    if (cur && ST.getPeople().some((p) => p.id === cur)) loadPerson(cur); else { renderPeople(); renderChart(); renderHome(); }
-    loadSharedLessons();
+    // Let the browser paint the page (with the loading screen) first; the saved chart and the sky are worked out right after.
+    // The fallback timer covers a tab that is hidden, where animation frames are paused.
+    let started = false;
+    const finish = () => {
+      if (started) return; started = true;
+      const cur = ST.getCurrent();
+      if (cur && ST.getPeople().some((p) => p.id === cur)) loadPerson(cur); else { renderPeople(); renderChart(); renderHome(); }
+      loadSharedLessons();
+      FX.startSky($('sky'));
+      document.documentElement.classList.add('ready');
+    };
+    if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(() => setTimeout(finish, 0));
+    setTimeout(finish, 300);
   }
   init();
 })();

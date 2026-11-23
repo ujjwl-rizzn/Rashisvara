@@ -3,9 +3,9 @@
     Every sentence comes from a result and a reason code. Nothing here guesses. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('./engine.js'), require('./i18n.js'), require('./reading.js'), require('./outlook.js'), require('./ashtaka.js'));
-  } else root.RsvOutlookView = factory(root.RsvEngine, root.RsvI18n, root.RsvReading, root.RsvOutlook, root.RsvAshtaka);
-})(typeof self !== 'undefined' ? self : this, function (E, I, RD, O, AV) {
+    module.exports = factory(require('./engine.js'), require('./i18n.js'), require('./reading.js'), require('./outlook.js'), require('./ashtaka.js'), require('./rules.js'));
+  } else root.RsvOutlookView = factory(root.RsvEngine, root.RsvI18n, root.RsvReading, root.RsvOutlook, root.RsvAshtaka, root.RsvRules);
+})(typeof self !== 'undefined' ? self : this, function (E, I, RD, O, AV, R) {
   'use strict';
 
   const n = I.name, ui = (L, k, p) => I.ui(L, k, p);
@@ -27,16 +27,42 @@
 
   function quality(L, q) { return ui(L, q >= 0.2 ? 'oQGood' : q <= -0.2 ? 'oQBad' : 'oQMid'); }
 
+  const ORDER = ['Su', 'Mo', 'Ma', 'Me', 'Ju', 'Ve', 'Sa', 'Ra', 'Ke'];
+  const at = (L, key, i) => ui(L, key)[i];
   function dashaLines(L, a) {
-    return (a.dasha || []).map((d) => ui(L, 'oDashaLine', {
-      level: n.level(L, d.level), planet: n.planet(L, d.planet),
-      link: d.linked === null ? '' : ui(L, d.linked ? 'oDashaLinked' : 'oDashaGeneral'), quality: quality(L, d.q),
-    }).replace(/\s+/g, ' ').trim());
+    const out = [];
+    for (const d of a.dasha || []) {
+      out.push(ui(L, 'oDashaLine', {
+        level: n.level(L, d.level), planet: n.planet(L, d.planet),
+        link: d.linked === null ? '' : ui(L, d.linked ? 'oDashaLinked' : 'oDashaGeneral'), quality: quality(L, d.q),
+      }).replace(/\s+/g, ' ').trim());
+      // what a linked period brings, so the reason says what can happen and not only that it is "linked"
+      if (d.linked) out.push(ui(L, 'xDashaThemeLine', { planet: n.planet(L, d.planet), theme: at(L, 'xDashaTheme', ORDER.indexOf(d.planet)) }));
+    }
+    return out;
   }
-  function transitLines(L, a) {
+  // Transits that moved this area's score most: where the planet is, what it stands for, why it counts here, what it can bring
+  function transitLines(L, a, key) {
+    const theme = key === 'overall' ? '' : ui(L, THEME_KEY[key]);
     return a.tr.map((x) => {
-      const p = { planet: n.planet(L, x.planet), h: x.hMoon, fav: ui(L, x.fav ? 'oFavYes' : 'oFavNo'), bav: x.bav, linked: x.linked ? ui(L, 'oTrLinked') : '' };
-      return ui(L, x.bav === null ? 'oTrLineNoBav' : 'oTrLine', p);
+      const idx = ORDER.indexOf(x.planet);
+      return ui(L, 'xTr', {
+        planet: n.planet(L, x.planet), sig: n.planetSig(L, x.planet), h: x.hMoon, fav: ui(L, x.fav ? 'oFavYes' : 'oFavNo'),
+        bav: x.bav === null ? '' : ui(L, 'xTrBav', { bav: x.bav }),
+        role: key === 'overall' ? '' : ui(L, 'xRole_' + x.role, { area: theme }),
+        effect: x.good > 0 ? ui(L, 'xEffGood', { text: at(L, 'xPGood', idx) }) : x.good < 0 ? ui(L, 'xEffBad', { text: at(L, 'xPBad', idx) }) : '',
+      }).replace(/\s+/g, ' ').trim();
+    });
+  }
+  // The ruler of the weekday and the lord of the Moon's star, for the day outlook
+  function dayLordLines(L, a, out) {
+    if (out.period !== 'day' || !out.day || !(a.dl || []).length) return [];
+    return a.dl.map((d) => {
+      const p = {
+        planet: n.planet(L, d.planet), weekday: n.weekday(L, out.day.weekday), nak: n.nak(L, out.day.panchang.moonNak),
+        state: ui(L, d.q >= 0.2 ? 'xStateGood' : d.q <= -0.2 ? 'xStateBad' : 'xStateMid'), link: ui(L, d.linked ? 'xLinkYes' : 'xLinkNo'),
+      };
+      return ui(L, d.kind === 'vara' ? 'xDayLordVara' : 'xDayLordNak', p).replace(/\s+/g, ' ').trim();
     });
   }
   function taraLine(L, tara) {
@@ -51,6 +77,7 @@
       if (f.c === 'sade') out.push(n.sadeSati(L, f.phase) + part);
       else if (f.c === 'ashtama') out.push(ui(L, 'rAshtama') + part);
       else if (f.c === 'kantaka') out.push(ui(L, 'oArdha') + part);
+      else if (f.c === 'chandrashtama') out.push(ui(L, 'xChandraFlag') + part);
     }
     return out;
   }
@@ -65,18 +92,22 @@
   function areaCard(L, out, key, zone) {
     const a = out.areas[key], lines = [];
     if (key !== 'overall') {
-      lines.push(ui(L, 'oNatalLine', { label: n.label(L, a.natalLabel) }));
+      const def = R.AREAS[key];
+      lines.push(ui(L, 'xNatalLine', { label: n.label(L, a.natalLabel), hs: def.houses.join(' & '), sigs: def.houses.map((h) => n.houseSig(L, h)).join('; '), karakas: def.karakas.map((k) => n.planet(L, k)).join(', ') }));
       if (!out.reduced && typeof a.sav === 'number') lines.push(ui(L, 'oSavLine', { sav: a.sav.toFixed(1), word: ui(L, 'oSavWords')[SAV_IDX[AV.savClass(a.sav)]] }));
     }
     lines.push(...dashaLines(L, a));
-    lines.push(...transitLines(L, a));
-    const tl = taraLine(L, out.tara); if (tl) lines.push(tl);
+    lines.push(...transitLines(L, a, key));
+    lines.push(...dayLordLines(L, a, out));
+    lines.push(ui(L, out.period === 'day' ? 'xBgDay' : 'xBgLong'));
     if (key === 'overall') lines.push(...flagLines(L, out.flags));
     if (key === 'health') lines.push(ui(L, 'oHealthNote'));
     const mono = out.slotPeriod === 'month' ? 'Months' : 'Days';
+    const tone = a.label === 'strong' || a.label === 'good' ? 0 : a.label === 'mixed' ? 1 : 2;
     return {
       key, title: areaTitle(L, key), label: n.label(L, a.label), labelKey: a.label, pct: a.pct,
       bar: Math.max(6, Math.round(a.pct)), sentence: sentence(L, key, a.label), lines,
+      exampleHead: ui(L, 'xExHead'), example: at(L, 'xEx_' + key, tone),
       best: a.best.map((s) => slotLabel(L, s, out.slotPeriod, zone)), caution: a.caution.map((s) => slotLabel(L, s, out.slotPeriod, zone)),
       bestTitle: ui(L, 'oBest' + mono), cautionTitle: ui(L, 'oCaution' + mono),
     };

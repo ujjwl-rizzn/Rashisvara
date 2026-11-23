@@ -50,7 +50,8 @@
   };
   // Tara bala: count from the birth star to the day's Moon star, in nines. Quality of each of the nine.
   const TARA_Q = [0, 1, -1, 1, -1, 1, -1, 1, 1];           // Janma, Sampat, Vipat, Kshema, Pratyari, Sadhana, Naidhana, Mitra, Parama Mitra
-  const TARA_W = 2;
+  const TARA_W = 1.5;
+  const DAYLORD_W = 1.2;                                     // weight of the weekday lord and the Moon-star lord (day outlook only)
   // Segment (1..8 of daylight) for Rahu Kaal, Yamaganda, Gulika by weekday (0 = Sunday)
   const RAHU = [8, 2, 7, 5, 6, 4, 3], YAMA = [5, 4, 3, 2, 1, 7, 6], GULIKA = [7, 6, 5, 4, 3, 2, 1];
 
@@ -160,17 +161,22 @@
         id, w: W[id], q: sum(arr.map((x) => x.q)) / arr.length, mid,
         // share of the window spent in each house (from the lagna), to see when a planet moves through an area's houses
         inHouse: (hs) => arr.filter((x) => hs.includes(x.hLagna)).length / arr.length,
+        // the same, counted from the natal Moon (Chandra lagna: how Indian rashifal reads the houses)
+        inMoonHouse: (hs) => arr.filter((x) => hs.includes(x.hMoon)).length / arr.length,
         signs: Array.from(new Set(arr.map((x) => x.sign))),
         saturnHouses: id === 'Sa' ? arr.map((x) => x.hMoon) : null,
       };
     }
-    let tara = null;
+    let tara = null, dayLords = null;
     if (period === 'day') {
       const q = sum(taras.map((x) => TARA_Q[x - 1])) / taras.length;
       const seq = taras.filter((x, i) => i === 0 || x !== taras[i - 1]);
       tara = { q, seq, mid: taras[Math.floor(taras.length / 2)] };
+      // The day's own rulers: the weekday lord and the lord of the Moon's star at midday
+      const midLon = lonsCached(ctx, (t0 + t1) / 2).Mo;
+      dayLords = [{ kind: 'vara', planet: E.WEEKDAY_LORD[localWeekday(t0, ctx.zone)] }, { kind: 'nak', planet: E.DASHA_ORDER[Math.floor(midLon / E.NAK_LEN) % 9] }];
     }
-    return { period, t0, t1, stats, tara, times };
+    return { period, t0, t1, stats, tara, dayLords, times };
   }
 
   // Dasha part for one area over a window
@@ -198,19 +204,29 @@
   }
 
   // Score one area in one window. Returns parts, total S and the reasons behind it.
+  // A planet counts more for an area when it is a natural significator (karaka) of it, rules one of its houses, or is
+  // moving through one of its houses (counted from the lagna and, as Indian rashifal does, from the natal Moon).
   function scoreArea(ctx, area, ws, dashaOverride) {
     const period = ws.period, [wN, wD, wT] = WEIGHTS[period];
-    // Transit part
     let num = 0, den = 0; const contrib = [];
     for (const id of E.PLANETS) {
       const st = ws.stats[id];
-      const linked = area.karakas.includes(id) ? 2 : 0;
-      const ruler = ctx.reduced ? 0 : (area.lords.has(id) ? 1.5 : 0);
-      const moving = ctx.reduced ? 0 : 1.0 * st.inHouse(area.houses);
-      const rel = 0.5 + linked + ruler + moving;      // planets that rule, signify or move through the area count more; the rest still count a little
+      const isKaraka = area.karakas.includes(id), isRuler = !ctx.reduced && area.lords.has(id);
+      const movesL = ctx.reduced ? 0 : st.inHouse(area.houses), movesM = st.inMoonHouse(area.houses);
+      const rel = 0.35 + (isKaraka ? 3 : 0) + (isRuler ? 1.5 : 0) + movesL + 1.5 * movesM;
       const wt = st.w * rel;
       num += wt * st.q; den += wt;
-      contrib.push({ id, v: wt * st.q, rel, st });
+      contrib.push({ id, v: wt * st.q, rel, st, isKaraka, isRuler, movesL, movesM });
+    }
+    // The ruler of the weekday and the lord of the Moon's star colour the day; they count by how they relate to the area
+    const dl = [];
+    if (ws.dayLords && !ctx.reduced) {
+      for (const d of ws.dayLords) {
+        const isKaraka = area.karakas.includes(d.planet), isRuler = area.lords.has(d.planet);
+        const rel = isKaraka ? 1 : isRuler ? 0.7 : 0.25, q = ctx.quality[d.planet];
+        num += DAYLORD_W * rel * q; den += DAYLORD_W * rel;
+        dl.push({ kind: d.kind, planet: d.planet, q, linked: isKaraka || isRuler, rel });
+      }
     }
     if (ws.tara) { num += TARA_W * ws.tara.q; den += TARA_W; }
     const T = den ? clamp(num / den) : 0;
@@ -218,10 +234,14 @@
     if (!ctx.reduced) { const d = dashaOverride || dashaPart(ctx, area, period, ws.t0, ws.t1); D = d.D; dmid = d.mid; }
     const N = area.N;
     const S = ctx.reduced ? T : wN * N + wD * D + wT * T;
-    // Top transit reasons by size of effect
+    // The transits that moved this score most
     contrib.sort((a, b) => Math.abs(b.v) - Math.abs(a.v));
-    const tr = contrib.slice(0, 3).map((c) => ({ c: 'tr', planet: c.id, hMoon: c.st.mid.hMoon, hLagna: c.st.mid.hLagna, fav: c.st.mid.fav, bav: c.st.mid.bav, linked: c.rel >= 1.5, good: c.st.q > 0.15 ? 1 : c.st.q < -0.15 ? -1 : 0 }));
-    return { N, D, T, S, dasha: dmid, tr };
+    const tr = contrib.slice(0, 4).map((c) => ({
+      c: 'tr', planet: c.id, hMoon: c.st.mid.hMoon, hLagna: c.st.mid.hLagna, fav: c.st.mid.fav, bav: c.st.mid.bav,
+      role: c.isKaraka ? 'karaka' : c.isRuler ? 'ruler' : (c.movesM > 0.5 || c.movesL > 0.5) ? 'moves' : 'general',
+      inAreaHouse: c.movesM > 0.5, linked: c.rel >= 1.5, good: c.st.q > 0.15 ? 1 : c.st.q < -0.15 ? -1 : 0,
+    }));
+    return { N, D, T, S, dasha: dmid, tr, dl };
   }
 
   // Empirical percentile (0..100) of a score within the calibration table of its period
@@ -331,14 +351,18 @@
     for (const key of AREA_KEYS) {
       const s = scoreArea(ctx, ctx.areas[key], ws);
       const pct = percentile(s.S, tablePct);
-      areas[key] = { key, S: s.S, parts: { N: s.N, D: s.D, T: s.T }, pct, label: labelOf(pct), natalLabel: R.labelFor(ctx.areas[key].natalScore), sav: ctx.areas[key].savMean, dasha: s.dasha, tr: s.tr, best: [], caution: [] };
+      areas[key] = { key, S: s.S, parts: { N: s.N, D: s.D, T: s.T }, pct, label: labelOf(pct), natalLabel: R.labelFor(ctx.areas[key].natalScore), sav: ctx.areas[key].savMean, dasha: s.dasha, tr: s.tr, dl: s.dl, best: [], caution: [] };
       raw.push(s.S);
     }
     const meanS = sum(raw) / raw.length, pctAll = percentile(meanS, tableAll);
     const topTr = AREA_KEYS.map((k) => areas[k]).reduce((acc, a) => { a.tr.forEach((x) => { if (!acc.some((y) => y.planet === x.planet)) acc.push(x); }); return acc; }, []).slice(0, 3);
-    areas.overall = { key: 'overall', S: meanS, parts: { N: sum(AREA_KEYS.map((k) => areas[k].parts.N)) / 9, D: sum(AREA_KEYS.map((k) => areas[k].parts.D)) / 9, T: sum(AREA_KEYS.map((k) => areas[k].parts.T)) / 9 }, pct: pctAll, label: labelOf(pctAll), natalLabel: null, dasha: overallDasha(ctx, period, start, end), tr: topTr, best: [], caution: [] };
+    areas.overall = { key: 'overall', S: meanS, parts: { N: sum(AREA_KEYS.map((k) => areas[k].parts.N)) / 9, D: sum(AREA_KEYS.map((k) => areas[k].parts.D)) / 9, T: sum(AREA_KEYS.map((k) => areas[k].parts.T)) / 9 }, pct: pctAll, label: labelOf(pctAll), natalLabel: null, dasha: overallDasha(ctx, period, start, end), tr: topTr, dl: [], best: [], caution: [] };
 
-    const result = { period, offset, start, end, reduced: ctx.reduced, areas, flags: saturnFlags(ws), tara: ws.tara, events: [], day: null };
+    const flags = saturnFlags(ws);
+    const chandra = ws.stats.Mo.inMoonHouse([8]);
+    if (chandra > 0 && period !== 'year') flags.push({ c: 'chandrashtama', share: chandra, days: Math.round(chandra * cfg.days * 10) / 10 });
+    const moonMid = ws.stats.Mo.mid;
+    const result = { period, offset, start, end, reduced: ctx.reduced, areas, flags, tara: ws.tara, moon: { h: moonMid.hMoon, sign: moonMid.sign, fav: moonMid.fav }, events: [], day: null };
     if (opts && opts.lite) return result;                      // scores only (used to calibrate the labels)
     if (period === 'day') result.day = dayInfo(ctx, start);
     if (period !== 'day') {

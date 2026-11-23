@@ -89,6 +89,7 @@
     writeJSON('people', getPeople().filter((p) => p.id !== id));
     const chats = readMap('chats'); delete chats[id]; writeJSON('chats', chats);
     const notes = readMap('notes'); delete notes[id]; writeJSON('notes', notes);
+    const events = readMap('events'); delete events[id]; writeJSON('events', events);
     if (getCurrent() === id) rawDel('current');
   }
   function getCurrent() { const r = rawGet('current'); return r && ID_RE.test(r) ? r : null; }
@@ -121,6 +122,15 @@
   }
   function getChat(pid) { return cleanChat(readMap('chats')[pid], 40); }
   function setChat(pid, list) { const all = readMap('chats'); all[pid] = cleanChat(Array.isArray(list) ? list.slice(-30) : [], 30); writeJSON('chats', all); }
+  // Life events the person adds in the Understand tab: month, one of the nine areas, a few words. Plain text only.
+  const EVENT_AREAS = ['career', 'wealth', 'love', 'marriage', 'family', 'health', 'education', 'foreign', 'spirituality'];
+  const YM_RE = /^(19|20)\d\d-(0[1-9]|1[0-2])$/;
+  function cleanEvents(list, max) {
+    return arr(list, max).map((e) => (e && typeof e === 'object' && typeof e.ym === 'string' && YM_RE.test(e.ym) && EVENT_AREAS.includes(e.area)
+      ? { id: okId(e.id) ? e.id : C.randomId(), ym: e.ym, area: e.area, text: str(e.text, 120).replace(/[\u0000-\u001f\u007f]/g, ' ').trim() } : null)).filter(Boolean);
+  }
+  function getEvents(pid) { return cleanEvents(readMap('events')[pid], 30); }
+  function setEvents(pid, list) { if (!ID_RE.test(pid)) return false; const all = readMap('events'); all[pid] = cleanEvents(list, 30); return writeJSON('events', all); }
   function getNotes(pid) { return cleanNotes(readMap('notes')[pid], 30); }
   function setNotes(pid, list) { const all = readMap('notes'); all[pid] = cleanNotes(list, 30); writeJSON('notes', all); }
 
@@ -156,7 +166,7 @@
   }
 
   // ---- whole-device actions -------------------------------------------------
-  const KEYS = ['settings', 'people', 'current', 'chats', 'notes', 'lessons', 'good', 'keys'];
+  const KEYS = ['settings', 'people', 'current', 'chats', 'notes', 'events', 'lessons', 'good', 'keys'];
   function wipeAll() { KEYS.forEach(rawDel); mem.clear(); }
   // Everything the person saved, without the AI keys and without the consent tick (that must be given again on each device).
   function exportAll() {
@@ -164,7 +174,7 @@
     const people = getPeople(), ids = people.map((p) => p.id);
     const pick = (m, fn, n) => { const o = {}; for (const id of ids) { const l = fn(m[id], n); if (l.length) o[id] = l; } return o; };
     return { app: 'rashisvara', version: 2, exportedAt: new Date().toISOString(), settings: set, current: getCurrent(), people, lessons: getLessons(), good: getGood(),
-      notes: pick(readMap('notes'), cleanNotes, 30), chats: pick(readMap('chats'), cleanChat, 40), note: 'Saved AI keys are never included in exports.' };
+      notes: pick(readMap('notes'), cleanNotes, 30), events: pick(readMap('events'), cleanEvents, 30), chats: pick(readMap('chats'), cleanChat, 40), note: 'Saved AI keys are never included in exports.' };
   }
 
   // ---- restoring a backup ---------------------------------------------------
@@ -187,7 +197,7 @@
     const mine = (m) => { const o = {}; for (const k of Object.keys(m)) if (seen.has(k)) o[k] = m[k]; return o; };
     const backup = {
       people, lessons: cleanLessons(d.lessons, 50), good: cleanGood(d.good),
-      notes: mine(cleanMap(d.notes, (l) => cleanNotes(l, 30))), chats: mine(cleanMap(d.chats, (l) => cleanChat(l, 40))),
+      notes: mine(cleanMap(d.notes, (l) => cleanNotes(l, 30))), events: mine(cleanMap(d.events, (l) => cleanEvents(l, 30))), chats: mine(cleanMap(d.chats, (l) => cleanChat(l, 40))),
       settings: d.settings && typeof d.settings === 'object' ? cleanSettings(d.settings, getSettings()) : null,
       current: typeof d.current === 'string' && seen.has(d.current) ? d.current : null,
     };
@@ -198,15 +208,16 @@
   function restore(b, mode) {
     let ok = true;
     const w = (k, v) => { if (!writeJSON(k, v)) ok = false; };
-    const added = { people: 0, lessons: 0, notes: 0, chats: 0 };
+    const added = { people: 0, lessons: 0, notes: 0, chats: 0, events: 0 };
     if (mode === 'replace') {
       const people = b.people.slice(0, 50), ids = new Set(people.map((p) => p.id));
       const only = (m) => { const o = {}; for (const k of Object.keys(m)) if (ids.has(k)) o[k] = m[k]; return o; };
-      w('people', people); w('lessons', b.lessons); w('good', b.good); w('notes', only(b.notes)); w('chats', only(b.chats));
+      w('people', people); w('lessons', b.lessons); w('good', b.good); w('notes', only(b.notes)); w('events', only(b.events)); w('chats', only(b.chats));
       if (b.settings) { const cur = getSettings(); w('settings', Object.assign({}, b.settings, { consent: cur.consent })); }
       if (b.current && ids.has(b.current)) rawSet('current', b.current); else rawDel('current');
       added.people = people.length; added.lessons = b.lessons.length;
       added.notes = Object.values(b.notes).reduce((a, l) => a + l.length, 0); added.chats = Object.keys(only(b.chats)).length;
+      added.events = Object.values(only(b.events)).reduce((a, l) => a + l.length, 0);
       return { ok, added };
     }
     // merge: only add what is not here yet
@@ -223,6 +234,16 @@
         if (more.length) { notes[id] = cur.concat(more).slice(0, 30); added.notes += more.length; }
       }
     }
+    const events = readMap('events');
+    for (const id of Object.keys(b.events)) {
+      if (freshIds.has(id)) { events[id] = b.events[id]; added.events += b.events[id].length; }
+      else if (haveIds.has(id)) {
+        const cur = cleanEvents(events[id], 30), keys = new Set(cur.map((e) => e.ym + '|' + e.area + '|' + e.text));
+        const more = b.events[id].filter((e) => !keys.has(e.ym + '|' + e.area + '|' + e.text));
+        if (more.length) { events[id] = cur.concat(more).slice(0, 30); added.events += more.length; }
+      }
+    }
+    if (added.events) w('events', events);
     for (const id of Object.keys(b.chats)) if (freshIds.has(id) || (haveIds.has(id) && !cleanChat(chats[id], 40).length)) { chats[id] = b.chats[id].slice(-30); added.chats++; }
     if (added.notes) w('notes', notes);
     if (added.chats) w('chats', chats);
@@ -236,6 +257,6 @@
   }
   function persistent() { return !!ls; }
 
-  return { getSettings, setSettings, getPeople, savePerson, deletePerson, getCurrent, setCurrent, getChat, setChat, getNotes, setNotes,
+  return { getSettings, setSettings, getPeople, savePerson, deletePerson, getCurrent, setCurrent, getChat, setChat, getNotes, setNotes, getEvents, setEvents, cleanEvents, EVENT_AREAS,
     getLessons, setLessons, addLesson, getGood, addGood, getKeyBlob, setKeyBlob, wipeAll, exportAll, parseBackup, restore, MAX_BACKUP, persistent, cleanLessons, cleanChat, cleanNotes, validZone, MODEL_RE };
 });

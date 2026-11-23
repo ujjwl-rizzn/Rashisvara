@@ -246,11 +246,11 @@
     home:         { houses: [4],     karakas: ['Mo', 'Ve'] },
     education:    { houses: [4, 5],  karakas: ['Me', 'Ju'] },
     children:     { houses: [5],     karakas: ['Ju'] },
-    health:       { houses: [1, 6],  karakas: ['Su', 'Mo'] },
-    marriage:     { houses: [7],     karakas: ['Ve', 'Ju'] },
+    health:       { houses: [1, 6],  karakas: ['Su', 'Mo', 'Ma'] },
+    marriage:     { houses: [7, 2],  karakas: ['Ve', 'Ju'] },
     career:       { houses: [10, 6], karakas: ['Sa', 'Su', 'Me'] },
-    foreign:      { houses: [9, 12], karakas: ['Ra'] },
-    spirituality: { houses: [9, 12], karakas: ['Ju', 'Ke'] },
+    foreign:      { houses: [12, 9, 3], karakas: ['Ra', 'Sa'] },
+    spirituality: { houses: [9, 5, 12], karakas: ['Ju', 'Ke'] },
     // Added for the period outlooks. Love and romance: 5th house (attraction, romance) and 7th (partner), Venus and Moon.
     love:         { houses: [5, 7],  karakas: ['Ve', 'Mo'] },
     // Family: 2nd house (family, food, speech) and 4th (mother, home), Moon and Jupiter.

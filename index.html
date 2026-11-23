@@ -13,7 +13,34 @@
 <title>Rashisvara</title>
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.json">
+<link rel="preload" href="assets/fonts/noto-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/cinzel-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/style.css">
+<!-- deferred: the files download side by side while the page is already showing, and run in this order once it has loaded -->
+<script defer src="assets/vendor/astronomy.browser.min.js"></script>
+<script defer src="js/i18n.js"></script>
+<script defer src="js/i18n-extra.js"></script>
+<script defer src="js/i18n-outlook.js"></script>
+<script defer src="js/i18n-explain.js"></script>
+<script defer src="js/engine.js"></script>
+<script defer src="js/timezone.js"></script>
+<script defer src="js/rules.js"></script>
+<script defer src="js/ashtaka.js"></script>
+<script defer src="js/util.js"></script>
+<script defer src="js/crypto.js"></script>
+<script defer src="js/store.js"></script>
+<script defer src="js/reading.js"></script>
+<script defer src="js/outlook-cal.js"></script>
+<script defer src="js/outlook.js"></script>
+<script defer src="js/outlook-view.js"></script>
+<script defer src="js/explain.js"></script>
+<script defer src="js/ask-router.js"></script>
+<script defer src="js/checker.js"></script>
+<script defer src="js/chart.js"></script>
+<script defer src="js/ai.js"></script>
+<script defer src="js/sound.js"></script>
+<script defer src="js/fx.js"></script>
+<script defer src="js/app.js"></script>
 </head>
 <body>
 <canvas id="sky" aria-hidden="true"></canvas>
@@ -41,7 +68,7 @@
   <main id="main">
     <noscript><p class="warn">This app needs JavaScript.</p></noscript>
 
-    <section id="panel-home" role="tabpanel" aria-labelledby="tab-home" class="panel"><div id="home-out"></div></section>
+    <section id="panel-home" role="tabpanel" aria-labelledby="tab-home" class="panel"><div id="home-out"><div class="boot" role="status"><span class="boot-ring" aria-hidden="true"></span><p class="boot-name">Rashisvara</p></div></div></section>
 
     <section id="panel-chart" role="tabpanel" aria-labelledby="tab-chart" class="panel" hidden>
       <form id="birth-form" class="card" novalidate autocomplete="off">
@@ -51,8 +78,14 @@
             <label class="sr-only" for="people-select" data-i18n="people"></label>
             <select id="people-select" class="select-sm"></select>
             <button type="button" id="btn-new" class="btn btn-ghost btn-sm" data-i18n="newPerson"></button>
+            <button type="button" id="btn-delete-form" class="btn btn-danger btn-sm" data-i18n="nDeleteHere" hidden></button>
           </div>
         </div>
+        <p class="privacy" role="note" data-i18n="nPrivacy"></p>
+        <div class="grid">
+          <label class="field"><span data-i18n="nCountry"></span><select id="f-country" disabled><option value="IN" data-i18n="nIndia">India</option></select></label>
+        </div>
+        <p class="hint" data-i18n="nCountryNote"></p>
         <div class="grid">
           <label class="field"><span data-i18n="fName"></span><input id="f-name" type="text" maxlength="60" autocomplete="off"></label>
           <label class="field"><span data-i18n="fDate"></span><input id="f-date" type="date" min="1900-01-01" required></label>
@@ -67,6 +100,7 @@
             <input id="f-place" type="text" maxlength="100" autocomplete="off" data-i18n-ph="fPlacePh">
             <button type="button" id="btn-search" class="btn btn-ghost" data-i18n="fSearch"></button>
           </div>
+          <p class="hint place-how" data-i18n="nPlaceHow"></p>
           <div id="place-results" class="place-results"></div>
           <p id="place-msg" class="hint" aria-live="polite"></p>
         </div>
@@ -83,6 +117,7 @@
 
     <section id="panel-dasha" role="tabpanel" aria-labelledby="tab-dasha" class="panel" hidden><div id="dasha-out"></div></section>
     <section id="panel-reading" role="tabpanel" aria-labelledby="tab-reading" class="panel" hidden><div id="reading-out"></div></section>
+    <section id="panel-understand" role="tabpanel" aria-labelledby="tab-understand" class="panel" hidden><div id="understand-out"></div></section>
     <section id="panel-ask" role="tabpanel" aria-labelledby="tab-ask" class="panel" hidden><div id="ask-out"></div></section>
     <section id="panel-learn" role="tabpanel" aria-labelledby="tab-learn" class="panel" hidden><div id="teach-out"></div></section>
     <section id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" class="panel" hidden><div id="settings-out"></div></section>
@@ -98,27 +133,5 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <div id="report" class="rp" aria-hidden="true"></div>
 
-<script src="assets/vendor/astronomy.browser.min.js"></script>
-<script src="js/i18n.js"></script>
-<script src="js/i18n-extra.js"></script>
-<script src="js/i18n-outlook.js"></script>
-<script src="js/engine.js"></script>
-<script src="js/timezone.js"></script>
-<script src="js/rules.js"></script>
-<script src="js/ashtaka.js"></script>
-<script src="js/util.js"></script>
-<script src="js/crypto.js"></script>
-<script src="js/store.js"></script>
-<script src="js/reading.js"></script>
-<script src="js/outlook-cal.js"></script>
-<script src="js/outlook.js"></script>
-<script src="js/outlook-view.js"></script>
-<script src="js/ask-router.js"></script>
-<script src="js/checker.js"></script>
-<script src="js/chart.js"></script>
-<script src="js/ai.js"></script>
-<script src="js/sound.js"></script>
-<script src="js/fx.js"></script>
-<script src="js/app.js"></script>
 </body>
 </html>

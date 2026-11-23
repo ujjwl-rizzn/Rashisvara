@@ -6,9 +6,9 @@
     date of someone's death or length of life are declined; investment, lottery and betting questions get no tips. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('./engine.js'), require('./rules.js'), require('./i18n.js'), require('./reading.js'), require('./outlook.js'), require('./outlook-view.js'));
-  } else root.RsvRouter = factory(root.RsvEngine, root.RsvRules, root.RsvI18n, root.RsvReading, root.RsvOutlook, root.RsvOutlookView);
-})(typeof self !== 'undefined' ? self : this, function (E, R, I, RD, O, V) {
+    module.exports = factory(require('./engine.js'), require('./rules.js'), require('./i18n.js'), require('./reading.js'), require('./outlook.js'), require('./outlook-view.js'), require('./explain.js'));
+  } else root.RsvRouter = factory(root.RsvEngine, root.RsvRules, root.RsvI18n, root.RsvReading, root.RsvOutlook, root.RsvOutlookView, root.RsvExplain);
+})(typeof self !== 'undefined' ? self : this, function (E, R, I, RD, O, V, EX) {
   'use strict';
 
   const ui = (L, k, p) => I.ui(L, k, p);
@@ -74,6 +74,7 @@
     return { tokens, flat: ' ' + tokens.join(' ') + ' ' };
   }
   function tokenHit(tokens, kw) {
+    kw = kw.normalize('NFC');
     if (kw.endsWith('*')) { const p = kw.slice(0, -1); return tokens.some((t) => t.startsWith(p)); }
     return tokens.includes(kw);
   }
@@ -81,12 +82,73 @@
   const anyHit = (tokens, list) => list.some((kw) => tokenHit(tokens, kw));
   const phraseHit = (flat, list) => list.some((p) => flat.includes(' ' + p.toLowerCase().normalize('NFC') + ' '));
 
+
+  // ---- topics that explain the chart itself (not a prediction) -----------------------------------------
+  const PLANET_KW = {
+    Su: ['sun', 'surya*', 'सूर्य*', 'रवि', 'সূর্য*', 'রবি*'],
+    Mo: ['moon', 'moons', 'chandra*', 'chand', 'चंद्र*', 'चन्द्र*', 'চন্দ্র*', 'চাঁদ*'],
+    Ma: ['mars*', 'mangal*', 'मंगल*', 'মঙ্গল*'],
+    Me: ['mercury*', 'budh*', 'बुध*', 'বুধ*'],
+    Ju: ['jupiter*', 'guru*', 'brihaspati*', 'vrihaspati*', 'गुरु*', 'बृहस्पति*', 'বৃহস্পতি*', 'গুরু*'],
+    Ve: ['venus*', 'shukra*', 'शुक्र*', 'শুক্র*'],
+    Sa: ['saturn*', 'shani*', 'शनि*', 'শনি*'],
+    Ra: ['rahu*', 'राहु*', 'রাহু*'],
+    Ke: ['ketu*', 'केतु*', 'কেতু*'],
+  };
+  const ALL_PLANET_KW = [].concat(...Object.values(PLANET_KW));
+  const isPlanetToken = (t) => ALL_PLANET_KW.some((k) => tokenHit([t], k));
+  const EXPL_KW = ['what', 'mean', 'means', 'meaning', 'explain', 'why', 'about', 'tell', 'effect', 'effects', 'role', 'kya', 'matlab', 'batao', 'bataiye', 'samjhao', 'samjhaiye', 'arth', 'kaise', 'kyon', 'kyu',
+    'क्या', 'मतलब', 'बताओ', 'बताइए', 'समझाओ', 'समझाइए', 'अर्थ', 'कैसे', 'क्यों', 'কী', 'কি', 'মানে', 'অর্থ', 'বলো', 'বলুন', 'বোঝান', 'বুঝিয়ে', 'কেন'];
+  const TOPIC_KW = {
+    sade: ['sade', 'sadesati', 'sadhesati', 'sadhe', 'sati', 'dhaiya', 'dhaiyya', 'साढ़ेसाती', 'साढेसाती', 'साढ़े', 'साढे', 'ढैया', 'সাড়েসাতি', 'সাড়ে', 'ঢাইয়া'],
+    yoga: ['yogas', 'dosha', 'doshas', 'dosh', 'manglik', 'mangalik', 'kaalsarp', 'kalsarp', 'rajyoga', 'दोष', 'मांगलिक', 'मंगलिक', 'कालसर्प', 'राजयोग', 'দোষ', 'মাঙ্গলিক', 'কালসর্প'],
+    panchang: ['panchang', 'panchanga', 'panchangam', 'tithi', 'muhurat', 'muhurta', 'rahukaal', 'rahukal', 'पंचांग', 'तिथि', 'मुहूर्त', 'राहुकाल', 'পঞ্চাঙ্গ', 'পঞ্জিকা', 'তিথি', 'মুহূর্ত'],
+    dasha: ['dasha', 'dashaa', 'mahadasha', 'antardasha', 'antar', 'vimshottari', 'दशा', 'महादशा', 'अंतर्दशा', 'विंशोत्तरी', 'দশা', 'মহাদশা', 'অন্তর্দশা'],
+    lagna: ['lagna', 'lagan', 'ascendant', 'rising', 'लग्न', 'লগ্ন'],
+    moon: ['rashi', 'rasi', 'raashi', 'nakshatra', 'nakshatr', 'nakshatram', 'zodiac', 'sign', 'राशि', 'रासि', 'नक्षत्र', 'রাশি', 'নক্ষত্র'],
+    house: ['house*', 'bhav*', 'bhaav*', 'bhawa*', 'भाव*', 'ভাব*'],
+  };
+  const ORD_EN = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10, eleventh: 11, twelfth: 12 };
+  const ORD_HI = { 'पहला': 1, 'पहले': 1, 'पहली': 1, 'प्रथम': 1, 'दूसरे': 2, 'दूसरा': 2, 'द्वितीय': 2, 'तीसरे': 3, 'तीसरा': 3, 'चौथे': 4, 'चौथा': 4, 'चतुर्थ': 4, 'पाँचवें': 5, 'पांचवें': 5, 'पाँचवाँ': 5, 'पांचवां': 5, 'पंचम': 5, 'छठे': 6, 'छठा': 6, 'छठवें': 6, 'षष्ठ': 6, 'सातवें': 7, 'सातवाँ': 7, 'सातवां': 7, 'सप्तम': 7, 'आठवें': 8, 'आठवाँ': 8, 'आठवां': 8, 'अष्टम': 8, 'नौवें': 9, 'नवें': 9, 'नौवाँ': 9, 'नौवां': 9, 'नवम': 9, 'दसवें': 10, 'दसवाँ': 10, 'दसवां': 10, 'दशम': 10, 'ग्यारहवें': 11, 'ग्यारहवाँ': 11, 'एकादश': 11, 'बारहवें': 12, 'बारहवाँ': 12, 'द्वादश': 12 };
+  const ORD_BN = { 'প্রথম': 1, 'দ্বিতীয়': 2, 'তৃতীয়': 3, 'চতুর্থ': 4, 'পঞ্চম': 5, 'ষষ্ঠ': 6, 'সপ্তম': 7, 'অষ্টম': 8, 'নবম': 9, 'দশম': 10, 'একাদশ': 11, 'দ্বাদশ': 12 };
+  const ORD_HN = [[/^(pehl|pahl|pratham)/, 1], [/^(doosr|dusr|dwitiy)/, 2], [/^(teesr|tisr|tritiy)/, 3], [/^(chauth|chatur)/, 4], [/^(paanchv|panchv|paanchw|panchw|pancham)/, 5], [/^(chhath|shashth)/, 6], [/^(saatv|satv|saatw|satw|saptam)/, 7], [/^(aathv|athv|aathw|ashtam)/, 8], [/^(nauv|nauw|navam)/, 9], [/^(dasv|dasw|dasham)/, 10], [/^(gyarah|gyaarah|ekadash)/, 11], [/^(barah|baarah|dwadash)/, 12]];
+  const ORD_ALL = {}; [ORD_EN, ORD_HI, ORD_BN].forEach((m) => Object.keys(m).forEach((k) => { ORD_ALL[k.normalize('NFC')] = m[k]; }));
+  function houseNumber(tokens) {
+    for (const t of tokens) {
+      const m = /^(\d{1,2})(st|nd|rd|th)?$/.exec(t);
+      if (m && Number(m[1]) >= 1 && Number(m[1]) <= 12) return Number(m[1]);
+      if (ORD_ALL[t]) return ORD_ALL[t];
+      for (const [re, v] of ORD_HN) if (re.test(t)) return v;
+    }
+    return 0;
+  }
+  // Returns { kind, ... } or null. Topics that need no prediction. A life-area word (career, love...) wins over the vaguer topics.
+  function detectTopic(tokens, areaWords, flat) {
+    if (anyHit(tokens, TOPIC_KW.house)) { const h = houseNumber(tokens); if (h) return { kind: 'house', h }; }
+    if (anyHit(tokens, TOPIC_KW.sade)) return { kind: 'sade' };
+    if (anyHit(tokens, TOPIC_KW.yoga)) return { kind: 'yoga' };
+    if (anyHit(tokens, TOPIC_KW.panchang) || phraseHit(flat, ['rahu kaal', 'rahu kal', 'rahu kaalam', 'राहु काल', 'রাহু কাল', 'রাহুকাল'])) return { kind: 'panchang' };
+    if (areaWords) return null;
+    if (anyHit(tokens, TOPIC_KW.dasha)) return { kind: 'dasha' };
+    if (anyHit(tokens, TOPIC_KW.lagna)) return { kind: 'lagna' };
+    if (anyHit(tokens, TOPIC_KW.moon)) return { kind: 'moon' };
+    if (anyHit(tokens, EXPL_KW)) for (const id of Object.keys(PLANET_KW)) if (anyHit(tokens, PLANET_KW[id])) return { kind: 'planet', id };
+    return null;
+  }
+
   function parse(text, nowYear) {
     const { tokens, flat } = normalise(text);
-    const out = { area: null, period: null, offset: 0, when: false, safety: null, invest: false, empty: !tokens.length };
+    const out = { area: null, period: null, offset: 0, when: false, safety: null, invest: false, topic: null, empty: !tokens.length };
     if (!tokens.length) return out;
     if (phraseHit(flat, DISTRESS)) { out.safety = 'distress'; return out; }
     if ((anyHit(tokens, DEATH_WORDS) && (anyHit(tokens, DEATH_ASK) || phraseHit(flat, DEATH_ASK))) || phraseHit(flat, LIFESPAN)) { out.safety = 'death'; return out; }
+
+    // topics that explain the chart (Moon sign, dasha, a planet, a house...). Planet names do not count as life-area words here ("guru" is also a spirituality word).
+    const plain = tokens.filter((t) => !isPlanetToken(t));
+    const hasPeriodWord = anyHit(tokens, PERIOD_KW.day) || anyHit(tokens, PERIOD_KW.week) || anyHit(tokens, PERIOD_KW.month) || anyHit(tokens, PERIOD_KW.year);
+    const areaWords = PRIORITY.some((key) => countHits(plain, KW[key]) > 0) || hasPeriodWord;
+    const topic = detectTopic(tokens, areaWords, flat);
+    if (topic) { out.topic = topic; return out; }
 
     // life area: the one with the most keyword hits; ties go to the more specific area (see PRIORITY)
     let best = null, bestN = 0;
@@ -128,11 +190,11 @@
       const head = ui(L, 'qaHead', { area: c.title, period: V.periodTitle(L, per) + ' (' + V.rangeText(L, out, zone) + ')', label: c.label });
       const lines = [];
       // keep it short: the area's own rating, the running periods and the two biggest transits; the Home tab has the rest
-      for (const l of c.lines.slice(0, 7)) lines.push('- ' + l);
+      for (const l of c.lines.slice(0, 8)) lines.push('- ' + l);
       const extra = [];
       if (c.best.length) extra.push('**' + c.bestTitle + ':** ' + c.best.join(', '));
       if (c.caution.length) extra.push('**' + c.cautionTitle + ':** ' + c.caution.join(', '));
-      blocks.push('**' + head + '**\n' + c.sentence + '\n' + lines.join('\n') + (extra.length ? '\n\n' + extra.join('\n') : ''));
+      blocks.push('**' + head + '**\n' + c.sentence + '\n' + c.exampleHead + ' ' + c.example + '\n' + lines.join('\n') + (extra.length ? '\n\n' + extra.join('\n') : ''));
     }
     if (!p.period) blocks.push(ui(L, 'qaDefaultNote'));
     if (p.when && key !== 'overall') {
@@ -150,6 +212,7 @@
     const p = parse(o.text, nowYear);
     if (p.safety === 'distress') return { kind: 'safety', text: ui(L, 'qaDistress'), parsed: p };
     if (p.safety === 'death') return { kind: 'safety', text: ui(L, 'qaDeath'), parsed: p };
+    if (p.topic) return { kind: 'answer', text: EX.topicAnswer(L, chart, { nowMs: o.nowMs, zone: o.zone, timeUnknown: o.timeUnknown, ctx: o.ctx, place: o.place }, p.topic), parsed: p };
     if (!p.area) return { kind: 'nomatch', text: ui(L, 'qaNoMatch'), parsed: p };
     return { kind: 'answer', text: build(L, chart, o, p), parsed: p };
   }

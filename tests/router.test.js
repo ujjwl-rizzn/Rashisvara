@@ -1,6 +1,6 @@
 // Quick Answer router: keywords in four languages, periods, safety rules, and a full answer built from a chart.
 const assert = require('assert');
-const E = require('../js/engine.js'); require('../js/i18n-extra.js'); require('../js/i18n-outlook.js');
+const E = require('../js/engine.js'); require('../js/i18n-extra.js'); require('../js/i18n-outlook.js'); require('../js/i18n-explain.js');
 const I = require('../js/i18n.js'), RT = require('../js/ask-router.js');
 const P = (t) => RT.parse(t, 2026);
 
@@ -56,7 +56,7 @@ for (const [text, area, period, offset] of CASES) {
 for (const t of ['When will I get married', 'विवाह कब होगा', 'বিয়ে কবে হবে', 'shaadi kab hogi']) assert(P(t).when, 'when: ' + t);
 assert(!P('How is my career this month?').when);
 // every suggested question in every language must be understood
-for (const L of Object.keys(I.T)) for (const q of I.ui(L, 'aChips')) { const r = P(q); assert(r.area && r.safety === null, L + ' chip not understood: ' + q); }
+for (const L of Object.keys(I.T)) for (const q of I.ui(L, 'aChips')) { const r = P(q); assert((r.area || r.topic) && r.safety === null, L + ' chip not understood: ' + q); }
 // nothing matched
 for (const t of ['', '   ', 'hello there', 'what is the capital of France', 'tell me a joke']) assert.strictEqual(P(t).area, null, 'no area for "' + t + '"');
 // a short word must not match inside a longer one: Bengali "মা" (mother) vs "মাস" (month) vs "আমার" (my)

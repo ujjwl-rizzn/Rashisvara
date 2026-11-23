@@ -130,7 +130,7 @@ assert.strictEqual(ST.getSettings().lang, 'bn', 'merge does not change settings'
 assert.strictEqual(ST.getCurrent(), P2.id);
 // merging the same file again adds nothing
 const m2 = ST.restore(ST.parseBackup(JSON.stringify(more)).backup, 'merge');
-assert.deepStrictEqual(m2.added, { people: 0, lessons: 0, notes: 0, chats: 0 });
+assert.deepStrictEqual(m2.added, { people: 0, lessons: 0, notes: 0, chats: 0, events: 0 });
 
 // capacity: 50 people at most
 reset();
